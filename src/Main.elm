@@ -2,9 +2,11 @@ module Main exposing (main)
 
 import Browser
 import Html exposing (..)
+import Html.Attributes exposing (..)
 import Html.Events exposing (onClick)
 import Dict
 import Cons
+import List
 import Maybe exposing (withDefault)
 
 main =
@@ -30,14 +32,34 @@ type alias Assets = {
              
 type alias Model = {
         selected : PlayerName,
-        players : Dict.Dict PlayerName Assets
+        players : Dict.Dict PlayerName Assets,
+        markets : Dict.Dict SecurityType Market
     }
 
+marketMakerPrices : List Int
+marketMakerPrices = [10, 20, 30, 40, 50, 60, 70, 80, 90]
+
+type alias Market = {
+        -- Descending order
+        openBids : List Int,
+        -- Ascending order
+        openAsks : List Int
+    }
+
+defaultMarket : Market
+defaultMarket =
+    let startCut = (List.length marketMakerPrices) // 2
+    in {
+        openBids = List.reverse (List.take startCut marketMakerPrices),
+        openAsks = List.drop startCut marketMakerPrices
+    }
+        
 init : Model
 init =
     {
         selected = Cons.head allPlayers,
-        players = Dict.fromList <| Cons.toList <| Cons.map (\player -> (player, { monies = 100, securities = Dict.empty })) allPlayers
+        players = Dict.fromList <| Cons.toList <| Cons.map (\player -> (player, { monies = 100, securities = Dict.empty })) allPlayers,
+        markets = Dict.fromList <| Cons.toList <| Cons.map (\security -> (security, defaultMarket)) securities
     }
 
 -- UPDATE
@@ -72,6 +94,33 @@ must x = case x of
              Just result -> result
              Nothing -> Debug.todo "Assertion failed"
 
+cellWidth = 100
+halfCellWidth = (cellWidth // 2)
+                
+viewMarket : SecurityType -> Market -> Html Msg
+viewMarket security market =
+    tr []
+        (List.concat
+         [ [text security]
+         , List.map (\bid -> td [width cellWidth] [text (String.fromInt bid)]) (List.reverse (List.drop 1 market.openBids))
+         , case List.head market.openBids of
+               Nothing -> []
+               Just topBid ->
+                   [ td [width halfCellWidth] [text "x"]
+                   , td [width halfCellWidth] [button [onClick <| Sell security ] [text ("SELL " ++ String.fromInt topBid)]]
+                   ]
+         , case List.head market.openAsks of
+               Nothing -> []
+               Just bottomAsk ->
+                   [ td [width halfCellWidth] [button [onClick <| Buy security ] [text ("BUY " ++ String.fromInt bottomAsk)]]
+                   , td [width halfCellWidth] [text "x"]
+                   ]
+         , []
+         , List.map (\ask -> td [width cellWidth] [text (String.fromInt ask)]) (List.drop 1 market.openAsks)
+         ])
+
+
+        
 view : Model -> Html Msg
 view model =
     let selectedPlayer = must (Dict.get model.selected model.players)
@@ -83,14 +132,5 @@ view model =
                          selectedPlayer.monies) ]
                   
             , table []
-                (Cons.toList (Cons.map (\ security ->
-                           tr []
-                               [ td [] [text security]
-                               , td [] [button [ onClick <| Sell security ] [ text "-" ]]
-                               , td [] [text <| String.fromInt (Maybe.withDefault 0 (Dict.get security selectedPlayer.securities))]
-                               , td [] [button [ onClick <| Buy security ] [ text "+" ]]
-                               ]
-                          )
-                     securities))
+                (List.map (\(security, market) -> (viewMarket security market)) (Dict.toList model.markets))
             ]
-                          
