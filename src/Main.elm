@@ -253,7 +253,7 @@ viewMarket : SecurityType -> Market -> Assets -> Html Msg
 viewMarket security market assets =
     tr []
         (List.concat
-            [ [ text security ]
+            [ [ text <| security ++ " " ++ String.fromInt (assetsGetSecurity assets security) ]
             , List.map (\bid -> td [ width cellWidth ] [ text (String.fromInt bid) ]) (List.reverse (List.drop 1 market.openBids))
             , case List.head market.openBids of
                 Nothing ->
