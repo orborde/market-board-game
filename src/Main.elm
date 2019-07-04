@@ -118,6 +118,18 @@ marketBuy market =
         (lowestAsk market)
 
 
+marketSell : Market -> Maybe Market
+marketSell market =
+    Maybe.map
+        (\bid ->
+            { market
+                | openBids = List.drop 1 market.openBids
+                , openAsks = bid :: market.openAsks
+            }
+        )
+        (highestBid market)
+
+
 defaultMarket : Market
 defaultMarket =
     let
@@ -193,7 +205,26 @@ update msg model =
                         model
 
         Sell security ->
-            model
+            let
+                market =
+                    must (Dict.get security model.markets)
+            in
+            case highestBid market of
+                Nothing ->
+                    model
+
+                Just bid ->
+                    if canSell selectedPlayerAssets security market then
+                        let
+                            updatedModel =
+                                updateAsset model bid security -1
+                        in
+                        { updatedModel
+                            | markets = Dict.update security (must >> marketSell >> must >> Just) updatedModel.markets
+                        }
+
+                    else
+                        model
 
 
 
