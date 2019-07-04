@@ -37,7 +37,7 @@ allPlayers =
 
 securities : Cons.Cons SecurityType
 securities =
-    Cons.appendList (Cons.singleton "AMZN") [ "GOOG", "F" ]
+    Cons.appendList (Cons.singleton "Shit's rekt") [ "GOOG", "F" ]
 
 
 type alias Assets =
@@ -126,6 +126,7 @@ type alias Model =
     { selected : PlayerName
     , players : Dict.Dict PlayerName Assets
     , markets : Dict.Dict SecurityType Market
+    , bankMonies : Int
     }
 
 
@@ -192,6 +193,7 @@ init =
     { selected = Cons.head allPlayers
     , players = Dict.fromList <| Cons.toList <| Cons.map (\player -> ( player, { monies = 1000, securities = Dict.empty } )) allPlayers
     , markets = Dict.fromList <| Cons.toList <| Cons.map (\security -> ( security, defaultMarket )) securities
+    , bankMonies = 0
     }
 
 
@@ -248,6 +250,7 @@ update msg model =
                         in
                         { updatedModel
                             | markets = Dict.update security (must >> marketBuy >> must >> Just) updatedModel.markets
+                            , bankMonies = model.bankMonies + ask
                         }
 
                     else
@@ -270,6 +273,7 @@ update msg model =
                         in
                         { updatedModel
                             | markets = Dict.update security (must >> marketSell >> must >> Just) updatedModel.markets
+                            , bankMonies = model.bankMonies - bid
                         }
 
                     else
@@ -283,6 +287,7 @@ update msg model =
                 Just newAssets ->
                     { model
                         | players = Dict.insert model.selected newAssets model.players
+                        , bankMonies = model.bankMonies + bookPrice
                     }
 
         SellBook ->
@@ -293,6 +298,7 @@ update msg model =
                 Just newAssets ->
                     { model
                         | players = Dict.insert model.selected newAssets model.players
+                        , bankMonies = model.bankMonies - bookPrice
                     }
 
         SwitchTo player ->
@@ -377,6 +383,12 @@ view model =
                 ("Moneys: "
                     ++ Debug.toString
                         selectedPlayerAssets.monies
+                )
+            ]
+        , p []
+            [ text
+                ("BankMonies: "
+                    ++ Debug.toString model.bankMonies
                 )
             ]
         , p []
