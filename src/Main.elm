@@ -46,6 +46,36 @@ type alias Assets =
     }
 
 
+assetsGetSecurity : Assets -> SecurityType -> Int
+assetsGetSecurity assets security =
+    case Dict.get security assets.securities of
+        Nothing ->
+            0
+
+        Just amount ->
+            amount
+
+
+canBuy : Assets -> SecurityType -> Market -> Bool
+canBuy assets security market =
+    case lowestAsk market of
+        Nothing ->
+            False
+
+        Just ask ->
+            assets.monies >= ask
+
+
+canSell : Assets -> SecurityType -> Market -> Bool
+canSell assets security market =
+    case highestBid market of
+        Nothing ->
+            False
+
+        Just bid ->
+            assetsGetSecurity assets security > 0
+
+
 type alias Model =
     { selected : PlayerName
     , players : Dict.Dict PlayerName Assets
@@ -66,6 +96,28 @@ type alias Market =
     }
 
 
+lowestAsk : Market -> Maybe Int
+lowestAsk market =
+    List.head market.openAsks
+
+
+highestBid : Market -> Maybe Int
+highestBid market =
+    List.head market.openBids
+
+
+marketBuy : Market -> Maybe Market
+marketBuy market =
+    Maybe.map
+        (\ask ->
+            { market
+                | openAsks = List.drop 1 market.openAsks
+                , openBids = ask :: market.openBids
+            }
+        )
+        (lowestAsk market)
+
+
 defaultMarket : Market
 defaultMarket =
     let
@@ -80,7 +132,7 @@ defaultMarket =
 init : Model
 init =
     { selected = Cons.head allPlayers
-    , players = Dict.fromList <| Cons.toList <| Cons.map (\player -> ( player, { monies = 100, securities = Dict.empty } )) allPlayers
+    , players = Dict.fromList <| Cons.toList <| Cons.map (\player -> ( player, { monies = 1000, securities = Dict.empty } )) allPlayers
     , markets = Dict.fromList <| Cons.toList <| Cons.map (\security -> ( security, defaultMarket )) securities
     }
 
@@ -94,15 +146,16 @@ type Msg
     | Sell SecurityType
 
 
-updateAsset : Model -> SecurityType -> (Int -> Int) -> Model
-updateAsset model security f =
+updateAsset : Model -> Int -> SecurityType -> Int -> Model
+updateAsset model deltaMonies security deltaCount =
     { model
         | players =
             Dict.update (Debug.log (Debug.toString model.selected) model.selected)
                 (Maybe.map
                     (\assets ->
                         { assets
-                            | securities = Dict.update security (Maybe.withDefault 0 >> f >> Just) assets.securities
+                            | securities = Dict.update security (Maybe.withDefault 0 >> (+) deltaCount >> Just) assets.securities
+                            , monies = assets.monies + deltaMonies
                         }
                     )
                 )
@@ -113,15 +166,34 @@ updateAsset model security f =
 update : Msg -> Model -> Model
 update msg model =
     let
-        selectedPlayer =
+        selectedPlayerAssets =
             must (Dict.get model.selected model.players)
     in
     case Debug.log "msg is" msg of
         Buy security ->
-            updateAsset model security (\count -> count + 1)
+            let
+                market =
+                    must (Dict.get security model.markets)
+            in
+            case lowestAsk market of
+                Nothing ->
+                    model
+
+                Just ask ->
+                    if canBuy selectedPlayerAssets security market then
+                        let
+                            updatedModel =
+                                updateAsset model -ask security 1
+                        in
+                        { updatedModel
+                            | markets = Dict.update security (must >> marketBuy >> must >> Just) updatedModel.markets
+                        }
+
+                    else
+                        model
 
         Sell security ->
-            updateAsset model security (\count -> count - 1)
+            model
 
 
 
@@ -146,8 +218,8 @@ halfCellWidth =
     cellWidth // 2
 
 
-viewMarket : SecurityType -> Market -> Html Msg
-viewMarket security market =
+viewMarket : SecurityType -> Market -> Assets -> Html Msg
+viewMarket security market assets =
     tr []
         (List.concat
             [ [ text security ]
@@ -158,14 +230,14 @@ viewMarket security market =
 
                 Just topBid ->
                     [ td [ width halfCellWidth ] [ text "x" ]
-                    , td [ width halfCellWidth ] [ button [ onClick <| Sell security ] [ text ("SELL " ++ String.fromInt topBid) ] ]
+                    , td [ width halfCellWidth ] [ button [ onClick (Sell security), disabled (not (canSell assets security market)) ] [ text ("SELL " ++ String.fromInt topBid) ] ]
                     ]
             , case List.head market.openAsks of
                 Nothing ->
                     []
 
                 Just bottomAsk ->
-                    [ td [ width halfCellWidth ] [ button [ onClick <| Buy security ] [ text ("BUY " ++ String.fromInt bottomAsk) ] ]
+                    [ td [ width halfCellWidth ] [ button [ onClick (Buy security), disabled (not (canBuy assets security market)) ] [ text ("BUY " ++ String.fromInt bottomAsk) ] ]
                     , td [ width halfCellWidth ] [ text "x" ]
                     ]
             , []
@@ -177,7 +249,7 @@ viewMarket security market =
 view : Model -> Html Msg
 view model =
     let
-        selectedPlayer =
+        selectedPlayerAssets =
             must (Dict.get model.selected model.players)
     in
     div []
@@ -186,9 +258,9 @@ view model =
             [ text
                 ("Moneys: "
                     ++ Debug.toString
-                        selectedPlayer.monies
+                        selectedPlayerAssets.monies
                 )
             ]
         , table []
-            (List.map (\( security, market ) -> viewMarket security market) (Dict.toList model.markets))
+            (List.map (\( security, market ) -> viewMarket security market selectedPlayerAssets) (Dict.toList model.markets))
         ]
