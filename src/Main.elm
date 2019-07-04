@@ -76,6 +76,52 @@ canSell assets security market =
             assetsGetSecurity assets security > 0
 
 
+bookPrice =
+    100
+
+
+assetsBuyBook : Assets -> Maybe Assets
+assetsBuyBook assets =
+    if assets.monies >= bookPrice then
+        Just
+            { assets
+                | monies = assets.monies - bookPrice
+                , securities =
+                    Cons.foldl
+                        (\security newSecurities ->
+                            Dict.update security (Maybe.withDefault 0 >> (+) 1 >> Just) newSecurities
+                        )
+                        assets.securities
+                        securities
+            }
+
+    else
+        Nothing
+
+
+assetsSellBook : Assets -> Maybe Assets
+assetsSellBook assets =
+    let
+        hasEveryAsset =
+            Cons.all (\security -> assetsGetSecurity assets security > 0) securities
+    in
+    if hasEveryAsset then
+        Just
+            { assets
+                | monies = assets.monies + bookPrice
+                , securities =
+                    Cons.foldl
+                        (\security newSecurities ->
+                            Dict.insert security (assetsGetSecurity assets security - 1) newSecurities
+                        )
+                        assets.securities
+                        securities
+            }
+
+    else
+        Nothing
+
+
 type alias Model =
     { selected : PlayerName
     , players : Dict.Dict PlayerName Assets
@@ -156,6 +202,9 @@ init =
 type Msg
     = Buy SecurityType
     | Sell SecurityType
+    | BuyBook
+    | SellBook
+    | SwitchTo PlayerName
 
 
 updateAsset : Model -> Int -> SecurityType -> Int -> Model
@@ -225,6 +274,31 @@ update msg model =
 
                     else
                         model
+
+        BuyBook ->
+            case assetsBuyBook selectedPlayerAssets of
+                Nothing ->
+                    Debug.log "can't buy book" model
+
+                Just newAssets ->
+                    { model
+                        | players = Dict.insert model.selected newAssets model.players
+                    }
+
+        SellBook ->
+            case assetsSellBook selectedPlayerAssets of
+                Nothing ->
+                    Debug.log "can't sell book" model
+
+                Just newAssets ->
+                    { model
+                        | players = Dict.insert model.selected newAssets model.players
+                    }
+
+        SwitchTo player ->
+            { model
+                | selected = player
+            }
 
 
 
@@ -296,13 +370,18 @@ view model =
             must (Dict.get model.selected model.players)
     in
     div []
-        [ p [] [ text model.selected ]
+        [ p [] <| Cons.toList <| Cons.map (\player -> button [ onClick (SwitchTo player) ] [ text player ]) allPlayers
+        , p [] [ text model.selected ]
         , p []
             [ text
                 ("Moneys: "
                     ++ Debug.toString
                         selectedPlayerAssets.monies
                 )
+            ]
+        , p []
+            [ button [ onClick BuyBook ] [ text "BUY BOOK" ]
+            , button [ onClick SellBook ] [ text "SELL BOOK" ]
             ]
         , table [ style "border" "1px solid black" ]
             (List.map (\( security, market ) -> viewMarket security market selectedPlayerAssets) (Dict.toList model.markets))
