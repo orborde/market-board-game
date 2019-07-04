@@ -229,16 +229,28 @@ viewMarket security market assets =
                     []
 
                 Just topBid ->
-                    [ td [ width halfCellWidth ] [ text "x" ]
-                    , td [ width halfCellWidth ] [ button [ onClick (Sell security), disabled (not (canSell assets security market)) ] [ text ("SELL " ++ String.fromInt topBid) ] ]
+                    [ td [ width cellWidth ]
+                        [ table [ style "border" "1px solid black" ]
+                            [ tr []
+                                [ td [ width halfCellWidth ] [ text "x" ]
+                                , td [ width halfCellWidth ] [ button [ onClick (Sell security), disabled (not (canSell assets security market)) ] [ text ("SELL " ++ String.fromInt topBid) ] ]
+                                ]
+                            ]
+                        ]
                     ]
             , case List.head market.openAsks of
                 Nothing ->
                     []
 
                 Just bottomAsk ->
-                    [ td [ width halfCellWidth ] [ button [ onClick (Buy security), disabled (not (canBuy assets security market)) ] [ text ("BUY " ++ String.fromInt bottomAsk) ] ]
-                    , td [ width halfCellWidth ] [ text "x" ]
+                    [ td [ width cellWidth ]
+                        [ table [ style "border" "1px solid black" ]
+                            [ tr []
+                                [ td [ width halfCellWidth ] [ button [ onClick (Buy security), disabled (not (canBuy assets security market)) ] [ text ("BUY " ++ String.fromInt bottomAsk) ] ]
+                                , td [ width halfCellWidth ] [ text "x" ]
+                                ]
+                            ]
+                        ]
                     ]
             , []
             , List.map (\ask -> td [ width cellWidth ] [ text (String.fromInt ask) ]) (List.drop 1 market.openAsks)
@@ -261,6 +273,6 @@ view model =
                         selectedPlayerAssets.monies
                 )
             ]
-        , table []
+        , table [ style "border" "1px solid black" ]
             (List.map (\( security, market ) -> viewMarket security market selectedPlayerAssets) (Dict.toList model.markets))
         ]
