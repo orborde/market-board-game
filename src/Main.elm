@@ -4,6 +4,7 @@ import Browser
 import Html exposing (..)
 import Html.Events exposing (onClick)
 import Dict
+import Cons
 import Maybe exposing (withDefault)
 
 main =
@@ -16,11 +17,11 @@ type alias PlayerName = String
 type alias SecurityType = String
 type alias SecurityAmount = Int
 
-players : List PlayerName
-players = ["Speez", "Yam"]
+allPlayers : Cons.Cons PlayerName
+allPlayers = Cons.appendList (Cons.singleton "Speez") ["Yam"]
          
-securities : List SecurityType
-securities = ["AMZN", "GOOG", "F"]
+securities : Cons.Cons SecurityType
+securities = Cons.appendList (Cons.singleton "AMZN") ["GOOG", "F"]
 
 type alias Assets = {
         monies : Int,
@@ -35,44 +36,61 @@ type alias Model = {
 init : Model
 init =
     {
-        monies = 100,
-        assets = Dict.empty
+        selected = Cons.head allPlayers,
+        players = Dict.fromList <| Cons.toList <| Cons.map (\player -> (player, { monies = 100, securities = Dict.empty })) allPlayers
     }
 
 -- UPDATE
 
 type Msg = Buy SecurityType | Sell SecurityType
 
+updateAsset : Model -> SecurityType -> (Int -> Int) -> Model
+updateAsset model security f =
+    { model |
+          players = Dict.update (Debug.log (Debug.toString model.selected) model.selected)
+          (Maybe.map (\assets ->
+                          {assets |
+                               securities = Dict.update security (Maybe.withDefault 0 >> f >> Just) assets.securities}))
+          model.players
+    }
+                       
 update : Msg -> Model -> Model
 update msg model =
-  case msg of
-      Buy security ->
-          { model |
-                assets = Dict.update security (\count -> Just <| (Maybe.withDefault 0 count) + 1) model.assets
-          }
+    let selectedPlayer = must (Dict.get model.selected model.players)
+    in
+        case (Debug.log "msg is" msg) of
+            Buy security ->
+                updateAsset model security (\count -> count+1)
           
-      Sell security ->
-          { model |
-                assets = Dict.update security (\count -> Just <| (Maybe.withDefault 0 count) - 1) model.assets
-          }
+            Sell security ->
+                updateAsset model security (\count -> count-1)
 
 -- VIEW
 
+must : Maybe a -> a
+must x = case x of
+             Just result -> result
+             Nothing -> Debug.todo "Assertion failed"
+
 view : Model -> Html Msg
 view model =
-  div []
-      [ p []
-            [ text ("Moneys: " ++ Debug.toString model.monies) ]
-            
-      , table []
-          (List.map (\ security ->
-                          tr []
-                          [ td [] [text security]
-                          , td [] [button [ onClick <| Sell security ] [ text "-" ]]
-                          , td [] [text <| String.fromInt (Maybe.withDefault 0 (Dict.get security model.assets))]
-                          , td [] [button [ onClick <| Buy security ] [ text "+" ]]
-                          ]
-                     )
-                securities)
-      ]
+    let selectedPlayer = must (Dict.get model.selected model.players)
+
+    in
+        div []
+            [ p [] [ text model.selected ]
+            , p [] [ text ("Moneys: " ++ Debug.toString
+                         selectedPlayer.monies) ]
+                  
+            , table []
+                (Cons.toList (Cons.map (\ security ->
+                           tr []
+                               [ td [] [text security]
+                               , td [] [button [ onClick <| Sell security ] [ text "-" ]]
+                               , td [] [text <| String.fromInt (Maybe.withDefault 0 (Dict.get security selectedPlayer.securities))]
+                               , td [] [button [ onClick <| Buy security ] [ text "+" ]]
+                               ]
+                          )
+                     securities))
+            ]
                           
