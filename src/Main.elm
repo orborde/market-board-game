@@ -212,19 +212,22 @@ init =
 -- UPDATE
 
 
-type Msg
+type GameStateMsg
     = Buy SecurityType
     | Sell SecurityType
     | BuyBook
     | SellBook
+
+type Msg
+    = OrderMsg GameStateMsg
     | SwitchTo PlayerName
 
 
-updateAsset : Model -> Int -> SecurityType -> Int -> Model
-updateAsset model deltaMonies security deltaCount =
-    { model
+updateAsset : GameState -> PlayerName -> Int -> SecurityType -> Int -> GameState
+updateAsset gameState selectedPlayer deltaMonies security deltaCount =
+    { gameState
         | players =
-            Dict.update (Debug.log (Debug.toString model.selected) model.selected)
+            Dict.update (Debug.log (Debug.toString selectedPlayer) selectedPlayer)
                 (Maybe.map
                     (\assets ->
                         { assets
@@ -233,87 +236,102 @@ updateAsset model deltaMonies security deltaCount =
                         }
                     )
                 )
-                model.players
+                gameState.players
     }
 
 
-updateGameState : Msg -> GameState -> Model
-
-update : Msg -> Model -> Model
-update msg model =
+updateGameStateInternal : GameState -> PlayerName -> GameStateMsg -> GameState
+updateGameStateInternal gameState selectedPlayer msg =
     let
         selectedPlayerAssets =
-            must (Dict.get model.selected model.players)
+            must (Dict.get selectedPlayer gameState.players)
     in
     case Debug.log "msg is" msg of
         Buy security ->
             let
                 market =
-                    must (Dict.get security model.markets)
+                    must (Dict.get security gameState.markets)
             in
             case lowestAsk market of
                 Nothing ->
-                    model
+                    gameState
 
                 Just ask ->
                     if canBuy selectedPlayerAssets security market then
                         let
-                            updatedModel =
-                                updateAsset model -ask security 1
+                            updatedGameState =
+                                updateAsset gameState selectedPlayer -ask security 1
                         in
-                        { updatedModel
-                            | markets = Dict.update security (must >> marketBuy >> must >> Just) updatedModel.markets
-                            , bankMonies = model.bankMonies + ask
-                        }
-
+                            { updatedGameState
+                                | markets = Dict.update security (must >> marketBuy >> must >> Just) updatedGameState.markets
+                                , bankMonies = gameState.bankMonies + ask
+                            }
+                            
                     else
-                        model
+                        gameState
 
         Sell security ->
             let
                 market =
-                    must (Dict.get security model.markets)
+                    must (Dict.get security gameState.markets)
             in
             case highestBid market of
                 Nothing ->
-                    model
+                    gameState
 
                 Just bid ->
                     if canSell selectedPlayerAssets security market then
                         let
-                            updatedModel =
-                                updateAsset model bid security -1
+                            updatedGameState =
+                                updateAsset gameState selectedPlayer bid security -1
                         in
-                        { updatedModel
-                            | markets = Dict.update security (must >> marketSell >> must >> Just) updatedModel.markets
-                            , bankMonies = model.bankMonies - bid
-                        }
+                            { updatedGameState
+                                | markets = Dict.update security (must >> marketSell >> must >> Just) updatedGameState.markets
+                                , bankMonies = gameState.bankMonies - bid
+                            }
 
                     else
-                        model
+                        gameState
 
         BuyBook ->
             case assetsBuyBook selectedPlayerAssets of
                 Nothing ->
-                    Debug.log "can't buy book" model
+                    Debug.log "can't buy book" gameState
 
                 Just newAssets ->
-                    { model
-                        | players = Dict.insert model.selected newAssets model.players
-                        , bankMonies = model.bankMonies + bookPrice
+                    { gameState
+                        | players = Dict.insert selectedPlayer newAssets gameState.players
+                        , bankMonies = gameState.bankMonies + bookPrice
                     }
 
         SellBook ->
             case assetsSellBook selectedPlayerAssets of
                 Nothing ->
-                    Debug.log "can't sell book" model
+                    Debug.log "can't sell book" gameState
 
                 Just newAssets ->
-                    { model
-                        | players = Dict.insert model.selected newAssets model.players
-                        , bankMonies = model.bankMonies - bookPrice
+                    { gameState
+                        | players = Dict.insert selectedPlayer newAssets gameState.players
+                        , bankMonies = gameState.bankMonies - bookPrice
                     }
 
+updateGameState : GameState -> PlayerName -> GameStateMsg -> GameState
+updateGameState gameState selected msg =
+    let
+        newState = updateGameStateInternal gameState selected msg
+    in
+        {newState
+            | clock = newState.clock + 1
+        }
+            
+
+update : Msg -> Model -> Model
+update msg model =
+    case msg of
+        OrderMsg gsMsg ->
+            { model 
+                | gameState = updateGameState model.gameState model.selected gsMsg
+            }
         SwitchTo player ->
             { model
                 | selected = player
@@ -357,7 +375,7 @@ viewMarket security market assets =
                         [ table [ style "border" "1px solid black" ]
                             [ tr []
                                 [ td [ width halfCellWidth ] [ text "x" ]
-                                , td [ width halfCellWidth ] [ button [ onClick (Sell security), disabled (not (canSell assets security market)) ] [ text ("SELL " ++ String.fromInt topBid) ] ]
+                                , td [ width halfCellWidth ] [ button [ onClick <| OrderMsg (Sell security), disabled (not (canSell assets security market)) ] [ text ("SELL " ++ String.fromInt topBid) ] ]
                                 ]
                             ]
                         ]
@@ -370,7 +388,7 @@ viewMarket security market assets =
                     [ td [ width cellWidth ]
                         [ table [ style "border" "1px solid black" ]
                             [ tr []
-                                [ td [ width halfCellWidth ] [ button [ onClick (Buy security), disabled (not (canBuy assets security market)) ] [ text ("BUY " ++ String.fromInt bottomAsk) ] ]
+                                [ td [ width halfCellWidth ] [ button [ onClick <| OrderMsg (Buy security), disabled (not (canBuy assets security market)) ] [ text ("BUY " ++ String.fromInt bottomAsk) ] ]
                                 , td [ width halfCellWidth ] [ text "x" ]
                                 ]
                             ]
@@ -382,32 +400,36 @@ viewMarket security market assets =
         )
 
 
-view : Model -> Html Msg
-view model =
+viewGameState : GameState -> PlayerName -> Html Msg
+viewGameState gameState selectedPlayer = 
     let
         selectedPlayerAssets =
-            must (Dict.get model.selected model.players)
+            must (Dict.get selectedPlayer gameState.players)
     in
-    div []
-        [ p [] <| Cons.toList <| Cons.map (\player -> button [ onClick (SwitchTo player) ] [ text player ]) allPlayers
-        , p [] [ text model.selected ]
-        , p []
-            [ text
-                ("Moneys: "
-                    ++ Debug.toString
-                        selectedPlayerAssets.monies
-                )
+        div []
+            [ p [] <| Cons.toList <| Cons.map (\player -> button [ onClick (SwitchTo player) ] [ text player ]) allPlayers
+            , p [] [ text (selectedPlayer ++ " / Turn: " ++ (String.fromInt gameState.clock))]
+            , p []
+                [ text
+                      ("Moneys: "
+                           ++ Debug.toString
+                           selectedPlayerAssets.monies
+                      )
+                ]
+            , p []
+                [ text
+                      ("BankMonies: "
+                           ++ Debug.toString gameState.bankMonies
+                      )
+                ]
+            , p []
+                [ button [ onClick <| OrderMsg BuyBook ] [ text "BUY BOOK" ]
+                , button [ onClick <| OrderMsg SellBook ] [ text "SELL BOOK" ]
+                ]
+            , table [ style "border" "1px solid black" ]
+                (List.map (\( security, market ) -> viewMarket security market selectedPlayerAssets) (Dict.toList gameState.markets))
             ]
-        , p []
-            [ text
-                ("BankMonies: "
-                    ++ Debug.toString model.bankMonies
-                )
-            ]
-        , p []
-            [ button [ onClick BuyBook ] [ text "BUY BOOK" ]
-            , button [ onClick SellBook ] [ text "SELL BOOK" ]
-            ]
-        , table [ style "border" "1px solid black" ]
-            (List.map (\( security, market ) -> viewMarket security market selectedPlayerAssets) (Dict.toList model.markets))
-        ]
+
+view : Model -> Html Msg
+view model =
+    viewGameState model.gameState model.selected
