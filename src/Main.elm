@@ -122,11 +122,24 @@ assetsSellBook assets =
         Nothing
 
 
-type alias Model =
-    { selected : PlayerName
-    , players : Dict.Dict PlayerName Assets
+type alias GameState =
+    { players : Dict.Dict PlayerName Assets
     , markets : Dict.Dict SecurityType Market
     , bankMonies : Int
+    , clock : Int
+    }
+
+initGameState =
+    { players = Dict.fromList <| Cons.toList <| Cons.map (\player -> ( player, { monies = 1000, securities = Dict.empty } )) allPlayers
+    , markets = Dict.fromList <| Cons.toList <| Cons.map (\security -> ( security, defaultMarket )) securities
+    , bankMonies = 0
+    , clock = 0
+    }
+
+            
+type alias Model =
+    { selected : PlayerName
+    , gameState : GameState
     }
 
 
@@ -191,9 +204,7 @@ defaultMarket =
 init : Model
 init =
     { selected = Cons.head allPlayers
-    , players = Dict.fromList <| Cons.toList <| Cons.map (\player -> ( player, { monies = 1000, securities = Dict.empty } )) allPlayers
-    , markets = Dict.fromList <| Cons.toList <| Cons.map (\security -> ( security, defaultMarket )) securities
-    , bankMonies = 0
+    , gameState = initGameState
     }
 
 
@@ -225,6 +236,8 @@ updateAsset model deltaMonies security deltaCount =
                 model.players
     }
 
+
+updateGameState : Msg -> GameState -> Model
 
 update : Msg -> Model -> Model
 update msg model =
