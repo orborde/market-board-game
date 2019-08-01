@@ -304,7 +304,7 @@ init _ =
     ( { selected = Cons.head allPlayers
       , gameState = initGameState
       }
-    , getGameState
+    , postGameState Nothing initGameState
     )
 
 
@@ -429,25 +429,40 @@ updateGameState gameState selected msg =
     }
 
 
+gameUrl =
+    "http://localhost:13370/gam"
+
+
+expectGameState =
+    Http.expectJson GotUpdate (JD.field "current_state" decodeGameState)
+
+
 getGameState : Cmd Msg
 getGameState =
     Http.get
-        -- TODO
-        { url = ""
-        , expect = Http.expectJson GotUpdate decodeGameState
+        { url = gameUrl
+        , expect = expectGameState
         }
 
 
-postGameState : GameState -> GameState -> Cmd Msg
+postGameState : Maybe GameState -> GameState -> Cmd Msg
 postGameState old new =
+    let
+        oldJson =
+            case old of
+                Just gs ->
+                    encodeGameState gs
+
+                Nothing ->
+                    JE.null
+    in
     Http.post
-        -- TODO
-        { url = ""
-        , expect = Http.expectJson GotUpdate decodeGameState
+        { url = gameUrl
+        , expect = expectGameState
         , body =
             Http.jsonBody
                 (JE.object
-                    [ ( "old", encodeGameState old )
+                    [ ( "old", oldJson )
                     , ( "new", encodeGameState new )
                     ]
                 )
@@ -465,7 +480,7 @@ update msg model =
             ( { model
                 | gameState = newGameState
               }
-            , postGameState model.gameState newGameState
+            , postGameState (Just model.gameState) newGameState
             )
 
         SwitchTo player ->
@@ -489,7 +504,7 @@ update msg model =
 
         GotUpdate (Err error) ->
             -- TODO: don't busyloop
-            Debug.log ("error: " ++ Debug.toString error) ( model, getGameState )
+            Debug.log ("error: " ++ Debug.toString error) ( model, Cmd.none )
 
 
 
