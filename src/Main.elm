@@ -304,7 +304,10 @@ init _ =
     ( { selected = Cons.head allPlayers
       , gameState = initGameState
       }
-    , postGameState Nothing initGameState
+    , Cmd.batch
+        [ postGameState Nothing initGameState
+        , pollGameState Nothing
+        ]
     )
 
 
@@ -323,6 +326,7 @@ type Msg
     = OrderMsg GameStateMsg
     | SwitchTo PlayerName
     | GotUpdate (Result Http.Error GameState)
+    | FinishedSend (Result Http.Error ())
 
 
 updateAsset : GameState -> PlayerName -> Int -> SecurityType -> Int -> GameState
@@ -449,15 +453,24 @@ getGameState =
         }
 
 
-pollGameState : GameState -> Cmd Msg
+pollGameState : Maybe GameState -> Cmd Msg
 pollGameState oldState =
+    let
+        oldJson =
+            case oldState of
+                Just gs ->
+                    encodeGameState gs
+
+                Nothing ->
+                    JE.null
+    in
     Http.post
         { url = gameUrl ++ "/poll"
         , expect = expectGameState
         , body =
             Http.jsonBody
                 (JE.object
-                    [ ( currentStateField, encodeGameState oldState )
+                    [ ( currentStateField, oldJson )
                     ]
                 )
         }
@@ -476,7 +489,7 @@ postGameState old new =
     in
     Http.post
         { url = gameUrl
-        , expect = expectGameState
+        , expect = Http.expectWhatever FinishedSend
         , body =
             Http.jsonBody
                 (JE.object
@@ -517,12 +530,18 @@ update msg model =
             ( { mdl
                 | gameState = newGameState
               }
-            , pollGameState newGameState
+            , pollGameState (Just newGameState)
             )
 
         GotUpdate (Err error) ->
             -- TODO: don't busyloop
-            Debug.log ("error: " ++ Debug.toString error) ( model, Cmd.none )
+            Debug.log ("poll error: " ++ Debug.toString error) ( model, Cmd.none )
+
+        FinishedSend (Ok newGameState) ->
+            Debug.log "successfully sent to server" ( model, Cmd.none )
+
+        FinishedSend (Err error) ->
+            Debug.log ("send error: " ++ Debug.toString error) ( model, Cmd.none )
 
 
 
