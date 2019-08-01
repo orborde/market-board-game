@@ -7,14 +7,19 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick)
 import Http
-import Json.Decode
-import Json.Encode
+import Json.Decode as JD
+import Json.Encode as JE
 import List
 import Maybe exposing (withDefault)
 
 
 main =
-    Browser.sandbox { init = init, update = update, view = view }
+    Browser.element
+        { init = init
+        , update = update
+        , view = view
+        , subscriptions = \m -> Sub.none
+        }
 
 
 
@@ -47,6 +52,18 @@ type alias Assets =
     { monies : Int
     , securities : Dict.Dict SecurityType Int
     }
+
+
+decodeSecurities : JD.Decoder (Dict.Dict SecurityType Int)
+decodeSecurities =
+    JD.dict JD.int
+
+
+decodeAssets : JD.Decoder Assets
+decodeAssets =
+    JD.map2 Assets
+        (JD.field "monies" JD.int)
+        (JD.field "securities" decodeSecurities)
 
 
 assetsGetSecurity : Assets -> SecurityType -> Int
@@ -141,14 +158,22 @@ initGameState =
     }
 
 
+decodePlayersDict : JD.Decoder (Dict.Dict PlayerName Assets)
+decodePlayersDict =
+    JD.dict decodeAssets
 
--- decodeGameState : String -> GameState
---decodeGameState =
---    Json.Decode.map4
---        (Json.Decode.at "players" ...)
---        (Json.Decode.at "markets" ...)
---        (Json.Decode.at "bankMonies" Json.Decode.int)
---        (Json.Decode.at "clock" Json.Decode.int)
+
+decodeMarketsDict =
+    JD.dict decodeMarket
+
+
+decodeGameState : JD.Decoder GameState
+decodeGameState =
+    JD.map4 GameState
+        (JD.field "players" decodePlayersDict)
+        (JD.field "markets" decodeMarketsDict)
+        (JD.field "bankMonies" JD.int)
+        (JD.field "clock" JD.int)
 
 
 type alias Model =
@@ -168,6 +193,12 @@ type alias Market =
     , -- Ascending order
       openAsks : List Int
     }
+
+
+decodeMarket =
+    JD.map2 Market
+        (JD.field "openBids" (JD.list JD.int))
+        (JD.field "openAsks" (JD.list JD.int))
 
 
 lowestAsk : Market -> Maybe Int
@@ -215,11 +246,14 @@ defaultMarket =
     }
 
 
-init : Model
-init =
-    { selected = Cons.head allPlayers
-    , gameState = initGameState
-    }
+init : () -> ( Model, Cmd Msg )
+init whatever =
+    -- TODO
+    ( { selected = Cons.head allPlayers
+      , gameState = initGameState
+      }
+    , Cmd.none
+    )
 
 
 
@@ -236,7 +270,7 @@ type GameStateMsg
 type Msg
     = OrderMsg GameStateMsg
     | SwitchTo PlayerName
-    | GotUpdate (Result Http.Error String)
+    | GotUpdate (Result Http.Error GameState)
 
 
 
@@ -358,8 +392,9 @@ updateGameState gameState selected msg =
 getGameState : Cmd Msg
 getGameState =
     Http.get
-        { url = ????
-        , expect = Http.expectString GotText
+        -- TODO
+        { url = ""
+        , expect = Http.expectJson GotUpdate decodeGameState
         }
 
 
@@ -367,6 +402,7 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         OrderMsg gsMsg ->
+            -- TODO
             -- update gamestate
             -- start http post
             ( { model
@@ -376,6 +412,7 @@ update msg model =
             )
 
         SwitchTo player ->
+            -- TODO
             -- Don't perturb the HTTP request state, since a long poll should already be running.
             ( { model
                 | selected = player
@@ -386,15 +423,17 @@ update msg model =
         GotUpdate s ->
             -- overwrite model
             -- start long poll
+            -- TODO
             let
                 mdl =
                     Debug.log ("got update: " ++ Debug.toString s) model
             in
-            ( { mdl
-                | gameState = something
-              }
-            , someitgjtdtg
-            )
+            --            ( { mdl
+            --                | gameState = something
+            --              }
+            --            , someitgjtdtg
+            --            )
+            ( mdl, Cmd.none )
 
 
 
