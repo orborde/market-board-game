@@ -248,11 +248,10 @@ defaultMarket =
 
 init : () -> ( Model, Cmd Msg )
 init whatever =
-    -- TODO
     ( { selected = Cons.head allPlayers
       , gameState = initGameState
       }
-    , Cmd.none
+    , getGameState
     )
 
 
@@ -420,20 +419,20 @@ update msg model =
             , Cmd.none
             )
 
-        GotUpdate s ->
-            -- overwrite model
-            -- start long poll
-            -- TODO
+        GotUpdate (Ok newGameState) ->
             let
                 mdl =
                     Debug.log ("got update: " ++ Debug.toString s) model
             in
-            --            ( { mdl
-            --                | gameState = something
-            --              }
-            --            , someitgjtdtg
-            --            )
-            ( mdl, Cmd.none )
+            ( { mdl
+                | gameState = newGameState
+              }
+            , getGameState
+            )
+
+        GotUpdate (Err error) ->
+            -- TODO: don't busyloop
+            Debug.log ("error: " ++ Debug.toString error) ( model, getGameState )
 
 
 
