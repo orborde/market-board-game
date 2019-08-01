@@ -6,6 +6,9 @@ import Dict
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick)
+import Http
+import Json.Decode
+import Json.Encode
 import List
 import Maybe exposing (withDefault)
 
@@ -129,6 +132,7 @@ type alias GameState =
     , clock : Int
     }
 
+
 initGameState =
     { players = Dict.fromList <| Cons.toList <| Cons.map (\player -> ( player, { monies = 1000, securities = Dict.empty } )) allPlayers
     , markets = Dict.fromList <| Cons.toList <| Cons.map (\security -> ( security, defaultMarket )) securities
@@ -136,7 +140,17 @@ initGameState =
     , clock = 0
     }
 
-            
+
+
+-- decodeGameState : String -> GameState
+--decodeGameState =
+--    Json.Decode.map4
+--        (Json.Decode.at "players" ...)
+--        (Json.Decode.at "markets" ...)
+--        (Json.Decode.at "bankMonies" Json.Decode.int)
+--        (Json.Decode.at "clock" Json.Decode.int)
+
+
 type alias Model =
     { selected : PlayerName
     , gameState : GameState
@@ -218,9 +232,23 @@ type GameStateMsg
     | BuyBook
     | SellBook
 
+
 type Msg
     = OrderMsg GameStateMsg
     | SwitchTo PlayerName
+    | GotUpdate (Result Http.Error String)
+
+
+
+--postUpdate : (Result Http.Error a -> String) -> a -> a -> Cmd Msg
+--postUpdate msg old new =
+--    Http.post
+--        { url = "/states/omg"
+--        , body = Http.jsonBody <| Json.Encode.object [ ( "old", Json.Encode.object old ), ( "new", Json.Encode.object new ) ]
+--
+--        --        , expect = Http.expectJson msg (Json.Decode.field "current_state" decodeGameState)
+--        , expect = Http.expectString
+--        }
 
 
 updateAsset : GameState -> PlayerName -> Int -> SecurityType -> Int -> GameState
@@ -262,11 +290,11 @@ updateGameStateInternal gameState selectedPlayer msg =
                             updatedGameState =
                                 updateAsset gameState selectedPlayer -ask security 1
                         in
-                            { updatedGameState
-                                | markets = Dict.update security (must >> marketBuy >> must >> Just) updatedGameState.markets
-                                , bankMonies = gameState.bankMonies + ask
-                            }
-                            
+                        { updatedGameState
+                            | markets = Dict.update security (must >> marketBuy >> must >> Just) updatedGameState.markets
+                            , bankMonies = gameState.bankMonies + ask
+                        }
+
                     else
                         gameState
 
@@ -285,10 +313,10 @@ updateGameStateInternal gameState selectedPlayer msg =
                             updatedGameState =
                                 updateAsset gameState selectedPlayer bid security -1
                         in
-                            { updatedGameState
-                                | markets = Dict.update security (must >> marketSell >> must >> Just) updatedGameState.markets
-                                , bankMonies = gameState.bankMonies - bid
-                            }
+                        { updatedGameState
+                            | markets = Dict.update security (must >> marketSell >> must >> Just) updatedGameState.markets
+                            , bankMonies = gameState.bankMonies - bid
+                        }
 
                     else
                         gameState
@@ -315,27 +343,58 @@ updateGameStateInternal gameState selectedPlayer msg =
                         , bankMonies = gameState.bankMonies - bookPrice
                     }
 
+
 updateGameState : GameState -> PlayerName -> GameStateMsg -> GameState
 updateGameState gameState selected msg =
     let
-        newState = updateGameStateInternal gameState selected msg
+        newState =
+            updateGameStateInternal gameState selected msg
     in
-        {newState
-            | clock = newState.clock + 1
-        }
-            
+    { newState
+        | clock = newState.clock + 1
+    }
 
-update : Msg -> Model -> Model
+
+getGameState : Cmd Msg
+getGameState =
+    Http.get
+        { url = ????
+        , expect = Http.expectString GotText
+        }
+
+
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         OrderMsg gsMsg ->
-            { model 
+            -- update gamestate
+            -- start http post
+            ( { model
                 | gameState = updateGameState model.gameState model.selected gsMsg
-            }
+              }
+            , Cmd.none
+            )
+
         SwitchTo player ->
-            { model
+            -- Don't perturb the HTTP request state, since a long poll should already be running.
+            ( { model
                 | selected = player
-            }
+              }
+            , Cmd.none
+            )
+
+        GotUpdate s ->
+            -- overwrite model
+            -- start long poll
+            let
+                mdl =
+                    Debug.log ("got update: " ++ Debug.toString s) model
+            in
+            ( { mdl
+                | gameState = something
+              }
+            , someitgjtdtg
+            )
 
 
 
@@ -401,34 +460,35 @@ viewMarket security market assets =
 
 
 viewGameState : GameState -> PlayerName -> Html Msg
-viewGameState gameState selectedPlayer = 
+viewGameState gameState selectedPlayer =
     let
         selectedPlayerAssets =
             must (Dict.get selectedPlayer gameState.players)
     in
-        div []
-            [ p [] <| Cons.toList <| Cons.map (\player -> button [ onClick (SwitchTo player) ] [ text player ]) allPlayers
-            , p [] [ text (selectedPlayer ++ " / Turn: " ++ (String.fromInt gameState.clock))]
-            , p []
-                [ text
-                      ("Moneys: "
-                           ++ Debug.toString
-                           selectedPlayerAssets.monies
-                      )
-                ]
-            , p []
-                [ text
-                      ("BankMonies: "
-                           ++ Debug.toString gameState.bankMonies
-                      )
-                ]
-            , p []
-                [ button [ onClick <| OrderMsg BuyBook ] [ text "BUY BOOK" ]
-                , button [ onClick <| OrderMsg SellBook ] [ text "SELL BOOK" ]
-                ]
-            , table [ style "border" "1px solid black" ]
-                (List.map (\( security, market ) -> viewMarket security market selectedPlayerAssets) (Dict.toList gameState.markets))
+    div []
+        [ p [] <| Cons.toList <| Cons.map (\player -> button [ onClick (SwitchTo player) ] [ text player ]) allPlayers
+        , p [] [ text (selectedPlayer ++ " / Turn: " ++ String.fromInt gameState.clock) ]
+        , p []
+            [ text
+                ("Moneys: "
+                    ++ Debug.toString
+                        selectedPlayerAssets.monies
+                )
             ]
+        , p []
+            [ text
+                ("BankMonies: "
+                    ++ Debug.toString gameState.bankMonies
+                )
+            ]
+        , p []
+            [ button [ onClick <| OrderMsg BuyBook ] [ text "BUY BOOK" ]
+            , button [ onClick <| OrderMsg SellBook ] [ text "SELL BOOK" ]
+            ]
+        , table [ style "border" "1px solid black" ]
+            (List.map (\( security, market ) -> viewMarket security market selectedPlayerAssets) (Dict.toList gameState.markets))
+        ]
+
 
 view : Model -> Html Msg
 view model =
