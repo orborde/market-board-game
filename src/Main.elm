@@ -45,7 +45,7 @@ allPlayers =
 
 securities : Cons.Cons SecurityType
 securities =
-    Cons.appendList (Cons.singleton "Shit's rekt") [ "GOOG", "F" ]
+    Cons.appendList (Cons.singleton "AMZN") [ "GOOG", "F" ]
 
 
 type alias Assets =
