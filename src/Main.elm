@@ -411,7 +411,6 @@ update msg model =
             )
 
         SwitchTo player ->
-            -- TODO
             -- Don't perturb the HTTP request state, since a long poll should already be running.
             ( { model
                 | selected = player
