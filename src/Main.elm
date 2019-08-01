@@ -433,8 +433,12 @@ gameUrl =
     "http://localhost:13370/gam"
 
 
+currentStateField =
+    "current_state"
+
+
 expectGameState =
-    Http.expectJson GotUpdate (JD.field "current_state" decodeGameState)
+    Http.expectJson GotUpdate (JD.field currentStateField decodeGameState)
 
 
 getGameState : Cmd Msg
@@ -442,6 +446,20 @@ getGameState =
     Http.get
         { url = gameUrl
         , expect = expectGameState
+        }
+
+
+pollGameState : GameState -> Cmd Msg
+pollGameState oldState =
+    Http.post
+        { url = gameUrl ++ "/poll"
+        , expect = expectGameState
+        , body =
+            Http.jsonBody
+                (JE.object
+                    [ ( currentStateField, encodeGameState oldState )
+                    ]
+                )
         }
 
 
@@ -499,7 +517,7 @@ update msg model =
             ( { mdl
                 | gameState = newGameState
               }
-            , getGameState
+            , pollGameState newGameState
             )
 
         GotUpdate (Err error) ->
