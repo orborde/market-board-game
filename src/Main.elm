@@ -325,18 +325,6 @@ type Msg
     | GotUpdate (Result Http.Error GameState)
 
 
-
---postUpdate : (Result Http.Error a -> String) -> a -> a -> Cmd Msg
---postUpdate msg old new =
---    Http.post
---        { url = "/states/omg"
---        , body = Http.jsonBody <| Json.Encode.object [ ( "old", Json.Encode.object old ), ( "new", Json.Encode.object new ) ]
---
---        --        , expect = Http.expectJson msg (Json.Decode.field "current_state" decodeGameState)
---        , expect = Http.expectString
---        }
-
-
 updateAsset : GameState -> PlayerName -> Int -> SecurityType -> Int -> GameState
 updateAsset gameState selectedPlayer deltaMonies security deltaCount =
     { gameState
