@@ -54,16 +54,27 @@ type alias Assets =
     }
 
 
-decodeSecurities : JD.Decoder (Dict.Dict SecurityType Int)
-decodeSecurities =
-    JD.dict JD.int
+moniesField =
+    "monies"
+
+
+securitiesField =
+    "securities"
+
+
+encodeAssets : Assets -> JE.Value
+encodeAssets assets =
+    JE.object
+        [ ( moniesField, JE.int assets.monies )
+        , ( securitiesField, JE.dict identity JE.int assets.securities )
+        ]
 
 
 decodeAssets : JD.Decoder Assets
 decodeAssets =
     JD.map2 Assets
-        (JD.field "monies" JD.int)
-        (JD.field "securities" decodeSecurities)
+        (JD.field moniesField JD.int)
+        (JD.field securitiesField (JD.dict JD.int))
 
 
 assetsGetSecurity : Assets -> SecurityType -> Int
@@ -167,13 +178,39 @@ decodeMarketsDict =
     JD.dict decodeMarket
 
 
+playersField =
+    "players"
+
+
+marketsField =
+    "markets"
+
+
+bankMoniesField =
+    "bankMonies"
+
+
+clockField =
+    "clock"
+
+
 decodeGameState : JD.Decoder GameState
 decodeGameState =
     JD.map4 GameState
-        (JD.field "players" decodePlayersDict)
-        (JD.field "markets" decodeMarketsDict)
-        (JD.field "bankMonies" JD.int)
-        (JD.field "clock" JD.int)
+        (JD.field playersField decodePlayersDict)
+        (JD.field marketsField decodeMarketsDict)
+        (JD.field bankMoniesField JD.int)
+        (JD.field clockField JD.int)
+
+
+encodeGameState : GameState -> JE.Value
+encodeGameState state =
+    JE.object
+        [ ( playersField, JE.dict (\k -> k) encodeAssets state.players )
+        , ( marketsField, JE.dict (\k -> k) encodeMarket state.markets )
+        , ( bankMoniesField, JE.int state.bankMonies )
+        , ( clockField, JE.int state.clock )
+        ]
 
 
 type alias Model =
@@ -195,10 +232,26 @@ type alias Market =
     }
 
 
+openBidsField =
+    "openBids"
+
+
+openAsksField =
+    "openAsks"
+
+
+encodeMarket : Market -> JE.Value
+encodeMarket market =
+    JE.object
+        [ ( openBidsField, JE.list JE.int market.openBids )
+        , ( openAsksField, JE.list JE.int market.openAsks )
+        ]
+
+
 decodeMarket =
     JD.map2 Market
-        (JD.field "openBids" (JD.list JD.int))
-        (JD.field "openAsks" (JD.list JD.int))
+        (JD.field openBidsField (JD.list JD.int))
+        (JD.field openAsksField (JD.list JD.int))
 
 
 lowestAsk : Market -> Maybe Int
@@ -247,7 +300,7 @@ defaultMarket =
 
 
 init : () -> ( Model, Cmd Msg )
-init whatever =
+init _ =
     ( { selected = Cons.head allPlayers
       , gameState = initGameState
       }
@@ -397,17 +450,34 @@ getGameState =
         }
 
 
+postGameState : GameState -> GameState -> Cmd Msg
+postGameState old new =
+    Http.post
+        -- TODO
+        { url = ""
+        , expect = Http.expectJson GotUpdate decodeGameState
+        , body =
+            Http.jsonBody
+                (JE.object
+                    [ ( "old", encodeGameState old )
+                    , ( "new", encodeGameState new )
+                    ]
+                )
+        }
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         OrderMsg gsMsg ->
-            -- TODO
-            -- update gamestate
-            -- start http post
+            let
+                newGameState =
+                    updateGameState model.gameState model.selected gsMsg
+            in
             ( { model
-                | gameState = updateGameState model.gameState model.selected gsMsg
+                | gameState = newGameState
               }
-            , Cmd.none
+            , postGameState model.gameState newGameState
             )
 
         SwitchTo player ->
