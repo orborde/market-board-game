@@ -1,6 +1,7 @@
 module Main exposing (main)
 
 import Browser
+import Browser.Navigation as Nav
 import Cons
 import Dict
 import Html exposing (..)
@@ -11,11 +12,16 @@ import Json.Decode as JD
 import Json.Encode as JE
 import List
 import Maybe exposing (withDefault)
+import Url
+import Url.Builder
+import Url.Parser as UP
 
 
 main =
-    Browser.element
+    Browser.application
         { init = init
+        , onUrlChange = \_ -> Debug.todo "should never get called"
+        , onUrlRequest = \_ -> Debug.todo "should never get called"
         , update = update
         , view = view
         , subscriptions = \m -> Sub.none
@@ -213,7 +219,7 @@ encodeGameState state =
         ]
 
 
-type alias Model =
+type alias PlayPageModel =
     { selected : PlayerName
     , gameState : GameState
     }
@@ -299,16 +305,51 @@ defaultMarket =
     }
 
 
-init : () -> ( Model, Cmd Msg )
-init _ =
-    ( { selected = Cons.head allPlayers
-      , gameState = initGameState
-      }
-    , Cmd.batch
-        [ postGameState Nothing initGameState
-        , pollGameState Nothing
-        ]
-    )
+type alias CreatePageModel =
+    {}
+
+
+type AppState
+    = LoadAppState
+    | CreateAppState CreatePageModel
+    | PlayAppState PlayPageModel
+
+
+type alias Model =
+    { appState : AppState
+    , gameName : GameName
+    }
+
+
+
+--init : Url.Url -> ( Model, Cmd Msg )
+--init _ =
+--    ( { selected = Cons.head allPlayers
+--      , gameState = initGameState
+--      }
+--    , Cmd.batch
+--        [ postGameState Nothing initGameState
+--        , pollGameState Nothing
+--        ]
+--    )
+
+
+init : () -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
+init _ url _ =
+    let
+        routeWeAreAt =
+            Maybe.withDefault WatRpite (UP.parse route url)
+    in
+    case routeWeAreAt of
+        WatRpite ->
+            Debug.todo "rekt"
+
+        GameRoute gameName ->
+            ( { appState = LoadAppState
+              , gameName = gameName
+              }
+            , Cmd.map PlayMsgWrapper (getGameState gameName)
+            )
 
 
 
@@ -322,11 +363,17 @@ type GameStateMsg
     | SellBook
 
 
-type Msg
+type PlayMsg
     = OrderMsg GameStateMsg
     | SwitchTo PlayerName
     | GotUpdate (Result Http.Error GameState)
     | FinishedSend (Result Http.Error ())
+
+
+type Msg
+    = PlayMsgWrapper PlayMsg
+    | CreateMsgWrapper
+    | LoadMsgWrapper
 
 
 updateAsset : GameState -> PlayerName -> Int -> SecurityType -> Int -> GameState
@@ -433,10 +480,6 @@ updateGameState gameState selected msg =
     }
 
 
-gameUrl =
-    "http://localhost:13370/gam"
-
-
 currentStateField =
     "current_state"
 
@@ -445,16 +488,29 @@ expectGameState =
     Http.expectJson GotUpdate (JD.field currentStateField decodeGameState)
 
 
-getGameState : Cmd Msg
-getGameState =
+type alias GameName =
+    String
+
+
+type alias GamePart =
+    String
+
+
+gamePartUrl : GameName -> List GamePart -> String
+gamePartUrl name path =
+    Url.Builder.relative (List.concat [ [ name ], path ]) []
+
+
+getGameState : GameName -> Cmd PlayMsg
+getGameState gameName =
     Http.get
-        { url = gameUrl
+        { url = gamePartUrl gameName [ "state" ]
         , expect = expectGameState
         }
 
 
-pollGameState : Maybe GameState -> Cmd Msg
-pollGameState oldState =
+pollGameState : GameName -> Maybe GameState -> Cmd PlayMsg
+pollGameState gameName oldState =
     let
         oldJson =
             case oldState of
@@ -465,7 +521,7 @@ pollGameState oldState =
                     JE.null
     in
     Http.post
-        { url = gameUrl ++ "/poll"
+        { url = gamePartUrl gameName [ "poll" ]
         , expect = expectGameState
         , body =
             Http.jsonBody
@@ -476,8 +532,8 @@ pollGameState oldState =
         }
 
 
-postGameState : Maybe GameState -> GameState -> Cmd Msg
-postGameState old new =
+postGameState : GameName -> Maybe GameState -> GameState -> Cmd PlayMsg
+postGameState gameName old new =
     let
         oldJson =
             case old of
@@ -488,7 +544,7 @@ postGameState old new =
                     JE.null
     in
     Http.post
-        { url = gameUrl
+        { url = gamePartUrl gameName [ "state" ]
         , expect = Http.expectWhatever FinishedSend
         , body =
             Http.jsonBody
@@ -500,8 +556,8 @@ postGameState old new =
         }
 
 
-update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
+updatePlay : PlayMsg -> GameName -> PlayPageModel -> ( PlayPageModel, Cmd PlayMsg )
+updatePlay msg gameName model =
     case msg of
         OrderMsg gsMsg ->
             let
@@ -511,7 +567,7 @@ update msg model =
             ( { model
                 | gameState = newGameState
               }
-            , postGameState (Just model.gameState) newGameState
+            , postGameState gameName (Just model.gameState) newGameState
             )
 
         SwitchTo player ->
@@ -530,7 +586,7 @@ update msg model =
             ( { mdl
                 | gameState = newGameState
               }
-            , pollGameState (Just newGameState)
+            , pollGameState gameName (Just newGameState)
             )
 
         GotUpdate (Err error) ->
@@ -542,6 +598,24 @@ update msg model =
 
         FinishedSend (Err error) ->
             Debug.log ("send error: " ++ Debug.toString error) ( model, Cmd.none )
+
+
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model =
+    case ( msg, model.appState ) of
+        ( PlayMsgWrapper playMsg, PlayAppState playModel ) ->
+            let
+                ( newModel, cmd ) =
+                    updatePlay playMsg model.gameName playModel
+            in
+            ( { model
+                | appState = PlayAppState newModel
+              }
+            , Cmd.map PlayMsgWrapper cmd
+            )
+
+        ( _, _ ) ->
+            ( model, Cmd.none )
 
 
 
@@ -566,7 +640,7 @@ halfCellWidth =
     cellWidth // 2
 
 
-viewMarket : SecurityType -> Market -> Assets -> Html Msg
+viewMarket : SecurityType -> Market -> Assets -> Html PlayMsg
 viewMarket security market assets =
     tr []
         (List.concat
@@ -606,7 +680,7 @@ viewMarket security market assets =
         )
 
 
-viewGameState : GameState -> PlayerName -> Html Msg
+viewGameState : GameState -> PlayerName -> Html PlayMsg
 viewGameState gameState selectedPlayer =
     let
         selectedPlayerAssets =
@@ -637,6 +711,48 @@ viewGameState gameState selectedPlayer =
         ]
 
 
-view : Model -> Html Msg
-view model =
+viewLoad : Html Msg
+viewLoad =
+    h1 [] [ text "LOADING" ]
+
+
+viewPlay : PlayPageModel -> Html PlayMsg
+viewPlay model =
     viewGameState model.gameState model.selected
+
+
+viewCreate : CreatePageModel -> Html Msg
+viewCreate model =
+    h1 [] [ text "I BET YOU WISH YOU COULD TWEAK SOME PARAMETERS RIGHT NOW" ]
+
+
+type Route
+    = WatRpite
+    | GameRoute GameName
+
+
+route : UP.Parser (Route -> a) a
+route =
+    UP.oneOf
+        [ UP.map WatRpite UP.top
+        , UP.map GameRoute UP.string
+        ]
+
+
+view : Model -> Browser.Document Msg
+view model =
+    let
+        html =
+            case model.appState of
+                LoadAppState ->
+                    viewLoad
+
+                CreateAppState createModel ->
+                    viewCreate createModel
+
+                PlayAppState playModel ->
+                    Html.map PlayMsgWrapper (viewPlay playModel)
+    in
+    { title = "Market Game " ++ model.gameName
+    , body = [ html ]
+    }
