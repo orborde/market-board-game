@@ -348,7 +348,7 @@ init _ url _ =
             ( { appState = LoadAppState
               , gameName = gameName
               }
-            , Cmd.map PlayMsgWrapper (getGameState gameName)
+            , Cmd.map LoadMsg (getGameState gameName)
             )
 
 
@@ -363,7 +363,7 @@ type GameStateMsg
     | SellBook
 
 
-type PlayMsg
+type PlayMsgType
     = OrderMsg GameStateMsg
     | SwitchTo PlayerName
     | GotUpdate (Result Http.Error GameState)
@@ -371,9 +371,9 @@ type PlayMsg
 
 
 type Msg
-    = PlayMsgWrapper PlayMsg
-    | CreateMsgWrapper
-    | LoadMsgWrapper
+    = PlayMsg PlayMsgType
+    | CreateMsg
+    | LoadMsg LoadMsgType
 
 
 updateAsset : GameState -> PlayerName -> Int -> SecurityType -> Int -> GameState
@@ -509,7 +509,7 @@ getGameState gameName =
         }
 
 
-pollGameState : GameName -> Maybe GameState -> Cmd PlayMsg
+pollGameState : GameName -> Maybe GameState -> Cmd PlayMsgType
 pollGameState gameName oldState =
     let
         oldJson =
@@ -532,7 +532,7 @@ pollGameState gameName oldState =
         }
 
 
-postGameState : GameName -> Maybe GameState -> GameState -> Cmd PlayMsg
+postGameState : GameName -> Maybe GameState -> GameState -> Cmd PlayMsgType
 postGameState gameName old new =
     let
         oldJson =
@@ -556,7 +556,7 @@ postGameState gameName old new =
         }
 
 
-updatePlay : PlayMsg -> GameName -> PlayPageModel -> ( PlayPageModel, Cmd PlayMsg )
+updatePlay : PlayMsgType -> GameName -> PlayPageModel -> ( PlayPageModel, Cmd PlayMsgType )
 updatePlay msg gameName model =
     case msg of
         OrderMsg gsMsg ->
@@ -603,7 +603,7 @@ updatePlay msg gameName model =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( msg, model.appState ) of
-        ( PlayMsgWrapper playMsg, PlayAppState playModel ) ->
+        ( PlayMsg playMsg, PlayAppState playModel ) ->
             let
                 ( newModel, cmd ) =
                     updatePlay playMsg model.gameName playModel
@@ -611,7 +611,7 @@ update msg model =
             ( { model
                 | appState = PlayAppState newModel
               }
-            , Cmd.map PlayMsgWrapper cmd
+            , Cmd.map PlayMsg cmd
             )
 
         ( _, _ ) ->
@@ -640,7 +640,7 @@ halfCellWidth =
     cellWidth // 2
 
 
-viewMarket : SecurityType -> Market -> Assets -> Html PlayMsg
+viewMarket : SecurityType -> Market -> Assets -> Html PlayMsgType
 viewMarket security market assets =
     tr []
         (List.concat
@@ -680,7 +680,7 @@ viewMarket security market assets =
         )
 
 
-viewGameState : GameState -> PlayerName -> Html PlayMsg
+viewGameState : GameState -> PlayerName -> Html PlayMsgType
 viewGameState gameState selectedPlayer =
     let
         selectedPlayerAssets =
@@ -716,7 +716,7 @@ viewLoad =
     h1 [] [ text "LOADING" ]
 
 
-viewPlay : PlayPageModel -> Html PlayMsg
+viewPlay : PlayPageModel -> Html PlayMsgType
 viewPlay model =
     viewGameState model.gameState model.selected
 
@@ -751,7 +751,7 @@ view model =
                     viewCreate createModel
 
                 PlayAppState playModel ->
-                    Html.map PlayMsgWrapper (viewPlay playModel)
+                    Html.map PlayMsg (viewPlay playModel)
     in
     { title = "Market Game " ++ model.gameName
     , body = [ html ]
