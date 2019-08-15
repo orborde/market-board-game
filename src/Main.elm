@@ -348,7 +348,7 @@ init _ url _ =
             ( { appState = LoadAppState
               , gameName = gameName
               }
-            , Cmd.map LoadMsg (getGameState gameName)
+            , getGameState gameName
             )
 
 
@@ -366,14 +366,14 @@ type GameStateMsg
 type PlayMsgType
     = OrderMsg GameStateMsg
     | SwitchTo PlayerName
-    | GotUpdate (Result Http.Error GameState)
-    | FinishedSend (Result Http.Error ())
 
 
 type Msg
     = PlayMsg PlayMsgType
     | CreateMsg
-    | LoadMsg LoadMsgType
+    | LoadMsg
+    | GotUpdate (Result Http.Error GameState)
+    | FinishedSend (Result Http.Error ())
 
 
 updateAsset : GameState -> PlayerName -> Int -> SecurityType -> Int -> GameState
@@ -501,7 +501,7 @@ gamePartUrl name path =
     Url.Builder.relative (List.concat [ [ name ], path ]) []
 
 
-getGameState : GameName -> Cmd PlayMsg
+getGameState : GameName -> Cmd Msg
 getGameState gameName =
     Http.get
         { url = gamePartUrl gameName [ "state" ]
@@ -509,7 +509,7 @@ getGameState gameName =
         }
 
 
-pollGameState : GameName -> Maybe GameState -> Cmd PlayMsgType
+pollGameState : GameName -> Maybe GameState -> Cmd Msg
 pollGameState gameName oldState =
     let
         oldJson =
@@ -532,7 +532,7 @@ pollGameState gameName oldState =
         }
 
 
-postGameState : GameName -> Maybe GameState -> GameState -> Cmd PlayMsgType
+postGameState : GameName -> Maybe GameState -> GameState -> Cmd Msg
 postGameState gameName old new =
     let
         oldJson =
@@ -556,7 +556,7 @@ postGameState gameName old new =
         }
 
 
-updatePlay : PlayMsgType -> GameName -> PlayPageModel -> ( PlayPageModel, Cmd PlayMsgType )
+updatePlay : PlayMsgType -> GameName -> PlayPageModel -> ( PlayPageModel, Cmd Msg )
 updatePlay msg gameName model =
     case msg of
         OrderMsg gsMsg ->
@@ -578,27 +578,6 @@ updatePlay msg gameName model =
             , Cmd.none
             )
 
-        GotUpdate (Ok newGameState) ->
-            let
-                mdl =
-                    Debug.log ("got update: " ++ Debug.toString s) model
-            in
-            ( { mdl
-                | gameState = newGameState
-              }
-            , pollGameState gameName (Just newGameState)
-            )
-
-        GotUpdate (Err error) ->
-            -- TODO: don't busyloop
-            Debug.log ("poll error: " ++ Debug.toString error) ( model, Cmd.none )
-
-        FinishedSend (Ok newGameState) ->
-            Debug.log "successfully sent to server" ( model, Cmd.none )
-
-        FinishedSend (Err error) ->
-            Debug.log ("send error: " ++ Debug.toString error) ( model, Cmd.none )
-
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -611,8 +590,56 @@ update msg model =
             ( { model
                 | appState = PlayAppState newModel
               }
-            , Cmd.map PlayMsg cmd
+            , cmd
             )
+
+        ( GotUpdate (Ok newGameState), PlayAppState playModel ) ->
+            let
+                mdl =
+                    Debug.log ("got update: " ++ Debug.toString s) playModel
+            in
+            ( { model
+                | appState =
+                    PlayAppState
+                        { mdl
+                            | gameState = newGameState
+                        }
+              }
+            , pollGameState model.gameName (Just newGameState)
+            )
+
+        ( GotUpdate (Err newGameState), LoadAppState ) ->
+            let
+                mdl =
+                    Debug.log ("failed to load, trying to create: " ++ Debug.toString) model
+            in
+            ( { model
+                | appState =
+                    CreateAppState {}
+              }
+            , Cmd.none
+            )
+
+        ( GotUpdate (Ok newGameState), oldModel ) ->
+            let
+                mdl =
+                    Debug.log ("got update: " ++ Debug.toString s) oldModel
+            in
+            ( { model
+                | appState =
+                    PlayAppState
+                        { gameState = newGameState
+                        , selected = must (List.head (Dict.keys newGameState.players))
+                        }
+              }
+            , pollGameState model.gameName (Just newGameState)
+            )
+
+        ( FinishedSend (Ok newGameState), _ ) ->
+            Debug.log "successfully sent to server" ( model, Cmd.none )
+
+        ( FinishedSend (Err error), _ ) ->
+            Debug.log ("send error: " ++ Debug.toString error) ( model, Cmd.none )
 
         ( _, _ ) ->
             ( model, Cmd.none )
