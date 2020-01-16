@@ -716,10 +716,6 @@ update msg model =
         ( _, FinishedSend (Err error) ) ->
             Debug.log ("send error: " ++ Debug.toString error) ( model, Cmd.none )
 
-        -- TODO: delete this wildcard!
-        ( _, _ ) ->
-            ( model, Cmd.none )
-
 
 
 -- VIEW
