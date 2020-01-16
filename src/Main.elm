@@ -6,7 +6,7 @@ import Cons
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (onClick)
+import Html.Events exposing (onClick, onInput)
 import Http
 import Json.Decode as JD
 import Json.Encode as JE
@@ -827,9 +827,49 @@ viewPlay model =
     viewGameState model.gameState model.selected
 
 
+diagnoseCreatePageModel : CreatePageModel -> Maybe String
+diagnoseCreatePageModel model =
+    if List.length model.players < 2 then
+        Just "Need at least 2 players"
+
+    else if List.length model.securities < 2 then
+        Just "Need at least 2 securities"
+
+    else
+        Nothing
+
+
+createPageCreateButton : CreatePageModel -> Html Msg
+createPageCreateButton model =
+    case diagnoseCreatePageModel model of
+        Nothing ->
+            button [ onClick (CreateMsg StartGameMsg) ] [ text "Start game" ]
+
+        Just problem ->
+            button [ disabled True ] [ text problem ]
+
+
 viewCreate : CreatePageModel -> Html Msg
 viewCreate model =
-    h1 [] [ text "I BET YOU WISH YOU COULD TWEAK SOME PARAMETERS RIGHT NOW" ]
+    div []
+        [ h1 []
+            [ text ("Creating " ++ model.gameName) ]
+        , text "Players (comma-separated)"
+        , input
+            [ placeholder "Alice,Bob,Spencer"
+            , value (String.join "," model.players)
+            , onInput (SetPlayerListMsg >> CreateMsg)
+            ]
+            []
+        , text "Securities (comma-separated)"
+        , input
+            [ placeholder "AMZN,MSFT,GOOG"
+            , value (String.join "," model.securities)
+            , onInput (SetSecuritiesListMsg >> CreateMsg)
+            ]
+            []
+        , createPageCreateButton model
+        ]
 
 
 type Route
