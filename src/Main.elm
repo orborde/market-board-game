@@ -23,7 +23,7 @@ main =
         , onUrlRequest = \_ -> Debug.todo "should never get called"
         , update = update
         , view = view
-        , subscriptions = \m -> Sub.none
+        , subscriptions = \_ -> Sub.none
         }
 
 
@@ -83,7 +83,7 @@ assetsGetSecurity assets security =
 
 
 canBuy : Assets -> SecurityType -> Market -> Bool
-canBuy assets security market =
+canBuy assets _ market =
     case lowestAsk market of
         Nothing ->
             False
@@ -98,7 +98,7 @@ canSell assets security market =
         Nothing ->
             False
 
-        Just bid ->
+        Just _ ->
             assetsGetSecurity assets security > 0
 
 
@@ -676,7 +676,7 @@ update msg model =
 
         ( PlayAppState playModel, GotUpdate (Err error) ) ->
             let
-                mdl =
+                _ =
                     Debug.log ("failed to poll. I hope your phone has lots of battery! : " ++ Debug.toString error) playModel
             in
             ( model, pollGameState model.gameName (Just playModel.gameState) )
@@ -711,7 +711,7 @@ update msg model =
             , pollGameState model.gameName (Just newGameState)
             )
 
-        ( _, FinishedSend (Ok newGameState) ) ->
+        ( _, FinishedSend (Ok _) ) ->
             Debug.log "successfully sent to server" ( model, Cmd.none )
 
         ( _, FinishedSend (Err error) ) ->
