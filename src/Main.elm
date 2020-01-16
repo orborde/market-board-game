@@ -341,14 +341,14 @@ init : () -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init _ url _ =
     let
         routeWeAreAt =
-            Maybe.withDefault WatRpite (UP.parse route url)
+            Maybe.withDefault UnknownRoute (UP.parse route url)
     in
     case routeWeAreAt of
-        WatRpite ->
+        UnknownRoute ->
             Debug.todo "rekt"
 
         GameRoute gameName ->
-            ( { appState = LoadAppState
+            ( { appState = LoadAppState gameName
               , gameName = gameName
               }
             , getGameState gameName
@@ -833,14 +833,20 @@ viewCreate model =
 
 
 type Route
-    = WatRpite
+    = UnknownRoute
     | GameRoute GameName
+
+
+
+-- disordered-bits.club/myCoolGame <- user loads this
+-- disordered-bits.club/myCoolGame/state <- thing getGameState hits?
+-- disordered-bits.club/myCoolGame/poll  <- polling endpoint
 
 
 route : UP.Parser (Route -> a) a
 route =
     UP.oneOf
-        [ UP.map WatRpite UP.top
+        [ UP.map UnknownRoute UP.top
         , UP.map GameRoute UP.string
         ]
 
