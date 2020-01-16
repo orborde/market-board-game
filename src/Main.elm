@@ -739,6 +739,25 @@ update msg model =
         ( _, FinishedSend (Err error) ) ->
             Debug.log ("send error: " ++ Debug.toString error) ( model, Cmd.none )
 
+        -- Weird invalid stuff
+        ( LoadAppState _, PlayMsg _ ) ->
+            Debug.todo "invalid message for state?!"
+
+        ( LoadAppState _, CreateMsg _ ) ->
+            Debug.todo "invalid message for state?!"
+
+        ( CreateAppState _, PlayMsg _ ) ->
+            Debug.todo "invalid message for state?!"
+
+        ( CreateAppState _, LoadMsg ) ->
+            Debug.todo "invalid message for state?!"
+
+        ( PlayAppState _, CreateMsg _ ) ->
+            Debug.todo "invalid message for state?!"
+
+        ( PlayAppState _, LoadMsg ) ->
+            Debug.todo "invalid message for state?!"
+
 
 
 -- VIEW
