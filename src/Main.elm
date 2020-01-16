@@ -164,6 +164,34 @@ initGameState players securities =
     }
 
 
+gameStateHasBidDutchBook : GameState -> Bool
+gameStateHasBidDutchBook gameState =
+    List.sum (List.map (highestBid >> Maybe.withDefault 0) (Dict.values gameState.markets)) > 100
+
+
+gameStateHasAskDutchBook : GameState -> Bool
+gameStateHasAskDutchBook gameState =
+    List.sum (List.map (lowestAsk >> Maybe.withDefault 100) (Dict.values gameState.markets)) < 100
+
+
+gameStateBankStealsArbitrage : GameState -> GameState
+gameStateBankStealsArbitrage gameState =
+    if gameStateHasBidDutchBook gameState then
+        gameStateBankStealsArbitrage
+            { gameState
+                | markets = Dict.map (\_ market -> marketSell market |> Maybe.withDefault market) gameState.markets
+            }
+
+    else if gameStateHasAskDutchBook gameState then
+        gameStateBankStealsArbitrage
+            { gameState
+                | markets = Dict.map (\_ market -> marketBuy market |> Maybe.withDefault market) gameState.markets
+            }
+
+    else
+        gameState
+
+
 decodePlayersDict : JD.Decoder (Dict.Dict PlayerName Assets)
 decodePlayersDict =
     JD.dict decodeAssets
@@ -367,6 +395,7 @@ type CreateMsgType
 
 type PlayMsgType
     = OrderMsg GameStateMsg
+    | DestroyArbitrage
     | SwitchTo PlayerName
 
 
@@ -605,6 +634,17 @@ updatePlay msg model =
             , postGameState model.gameName (Just model.gameState) newGameState
             )
 
+        DestroyArbitrage ->
+            let
+                newGameState =
+                    gameStateBankStealsArbitrage model.gameState
+            in
+            ( { model
+                | gameState = newGameState
+              }
+            , postGameState model.gameName (Just model.gameState) newGameState
+            )
+
         SwitchTo player ->
             -- Don't perturb the HTTP request state, since a long poll should already be running.
             ( { model
@@ -836,6 +876,9 @@ viewGameState gameState selectedPlayer =
             ]
         , table [ style "border" "1px solid black" ]
             (List.map (\( security, market ) -> viewMarket security market selectedPlayerAssets) (Dict.toList gameState.markets))
+        , p []
+            [ button [ onClick DestroyArbitrage ] [ text "Destroy arbitrage" ]
+            ]
         ]
 
 
