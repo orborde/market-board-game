@@ -696,7 +696,7 @@ update msg model =
 
         ( LoadAppState gameName, GotUpdate (Ok newGameState) ) ->
             let
-                mdl =
+                _ =
                     Debug.log ("got update: " ++ Debug.toString s)
             in
             ( { model
