@@ -581,8 +581,9 @@ updatePlay msg gameName model =
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case ( msg, model.appState ) of
-        ( PlayMsg playMsg, PlayAppState playModel ) ->
+    case ( model.appState, msg ) of
+        -- Locally originated events
+        ( PlayAppState playModel, PlayMsg playMsg ) ->
             let
                 ( newModel, cmd ) =
                     updatePlay playMsg model.gameName playModel
@@ -593,7 +594,23 @@ update msg model =
             , cmd
             )
 
-        ( GotUpdate (Ok newGameState), PlayAppState playModel ) ->
+        -- TODO: do we even need this? There's no functionality attached; we're really just appeasing the type gods.
+        ( LoadAppState, LoadMsg ) ->
+            ( model, Cmd.none )
+
+        ( CreateAppState createModel, CreateMsg createMsg ) ->
+            let
+                ( newModel, cmd ) =
+                    updateCreate createMsg createModel
+            in
+            ( { model
+                | appState = CreateAppState newModel
+              }
+            , cmd
+            )
+
+        -- Network events
+        ( PlayAppState playModel, GotUpdate (Ok newGameState) ) ->
             let
                 mdl =
                     Debug.log ("got update: " ++ Debug.toString s) playModel
@@ -608,10 +625,17 @@ update msg model =
             , pollGameState model.gameName (Just newGameState)
             )
 
-        ( GotUpdate (Err newGameState), LoadAppState ) ->
+        ( PlayAppState playModel, GotUpdate (Err error) ) ->
             let
                 mdl =
-                    Debug.log ("failed to load, trying to create: " ++ Debug.toString) model
+                    Debug.log ("failed to poll. I hope your phone has lots of battery! : " ++ Debug.toString error) playModel
+            in
+            ( model, pollGameState model.gameName (Just playModel.gameState) )
+
+        ( LoadAppState, GotUpdate (Err error) ) ->
+            let
+                mdl =
+                    Debug.log ("failed to load, trying to create: " ++ Debug.toString error) model
             in
             ( { model
                 | appState =
@@ -620,10 +644,10 @@ update msg model =
             , Cmd.none
             )
 
-        ( GotUpdate (Ok newGameState), oldModel ) ->
+        ( LoadAppState, GotUpdate (Ok newGameState) ) ->
             let
                 mdl =
-                    Debug.log ("got update: " ++ Debug.toString s) oldModel
+                    Debug.log ("got update: " ++ Debug.toString s)
             in
             ( { model
                 | appState =
@@ -635,12 +659,13 @@ update msg model =
             , pollGameState model.gameName (Just newGameState)
             )
 
-        ( FinishedSend (Ok newGameState), _ ) ->
+        ( _, FinishedSend (Ok newGameState) ) ->
             Debug.log "successfully sent to server" ( model, Cmd.none )
 
-        ( FinishedSend (Err error), _ ) ->
+        ( _, FinishedSend (Err error) ) ->
             Debug.log ("send error: " ++ Debug.toString error) ( model, Cmd.none )
 
+        -- TODO: delete this wildcard!
         ( _, _ ) ->
             ( model, Cmd.none )
 
