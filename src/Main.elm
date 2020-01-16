@@ -658,6 +658,29 @@ update msg model =
             )
 
         -- Network events
+        ( CreateAppState createModel, GotUpdate (Ok newGameState) ) ->
+            let
+                _ =
+                    Debug.log ("got update: " ++ Debug.toString s)
+            in
+            ( { model
+                | appState =
+                    PlayAppState
+                        { gameName = createModel.gameName
+                        , gameState = newGameState
+                        , selected = must (List.head (Dict.keys newGameState.players))
+                        }
+              }
+            , pollGameState createModel.gameName (Just newGameState)
+            )
+
+        ( CreateAppState createModel, GotUpdate (Err error) ) ->
+            let
+                _ =
+                    Debug.log ("failed to poll. I hope your phone has lots of battery! : " ++ Debug.toString error) createModel
+            in
+            ( model, pollGameState createModel.gameName Nothing )
+
         ( PlayAppState playModel, GotUpdate (Ok newGameState) ) ->
             let
                 mdl =
