@@ -313,19 +313,6 @@ type alias Model =
     }
 
 
-
---init : Url.Url -> ( Model, Cmd Msg )
---init _ =
---    ( { selected = Cons.head allPlayers
---      , gameState = initGameState
---      }
---    , Cmd.batch
---        [ postGameState Nothing initGameState
---        , pollGameState Nothing
---        ]
---    )
-
-
 init : () -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init _ url _ =
     let
