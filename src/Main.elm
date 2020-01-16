@@ -588,7 +588,16 @@ updateCreate msg model =
     case msg of
         StartGameMsg ->
             -- Assume that we can only get this if the arguments are valid.
-            initLoadAppState model.gameName
+            let
+                ( newAppState, pollCmd ) =
+                    initLoadAppState model.gameName
+            in
+            ( newAppState
+            , Cmd.batch
+                [ postGameState model.gameName Nothing initGameState
+                , pollCmd
+                ]
+            )
 
         SetPlayerListMsg playersList ->
             ( CreateAppState
