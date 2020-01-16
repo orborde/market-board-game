@@ -306,11 +306,14 @@ defaultMarket =
 
 
 type alias CreatePageModel =
-    {}
+    { gameName : GameName
+    , players : List PlayerName
+    , securities : List SecurityType
+    }
 
 
 type AppState
-    = LoadAppState
+    = LoadAppState GameName
     | CreateAppState CreatePageModel
     | PlayAppState PlayPageModel
 
@@ -352,6 +355,24 @@ init _ url _ =
             )
 
 
+initLoadAppState : GameName -> ( AppState, Cmd Msg )
+initLoadAppState gameName =
+    ( LoadAppState gameName
+    , pollGameState gameName Nothing
+    )
+
+
+initCreateAppState : GameName -> ( AppState, Cmd Msg )
+initCreateAppState gameName =
+    ( CreateAppState
+        { gameName = gameName
+        , players = []
+        , securities = []
+        }
+    , pollGameState gameName Nothing
+    )
+
+
 
 -- UPDATE
 
@@ -363,6 +384,12 @@ type GameStateMsg
     | SellBook
 
 
+type CreateMsgType
+    = StartGameMsg
+    | SetPlayerListMsg String
+    | SetSecuritiesListMsg String
+
+
 type PlayMsgType
     = OrderMsg GameStateMsg
     | SwitchTo PlayerName
@@ -370,7 +397,7 @@ type PlayMsgType
 
 type Msg
     = PlayMsg PlayMsgType
-    | CreateMsg
+    | CreateMsg CreateMsgType
     | LoadMsg
     | GotUpdate (Result Http.Error GameState)
     | FinishedSend (Result Http.Error ())
@@ -556,6 +583,30 @@ postGameState gameName old new =
         }
 
 
+updateCreate : CreateMsgType -> CreatePageModel -> ( AppState, Cmd Msg )
+updateCreate msg model =
+    case msg of
+        StartGameMsg ->
+            -- Assume that we can only get this if the arguments are valid.
+            initLoadAppState model.gameName
+
+        SetPlayerListMsg playersList ->
+            ( CreateAppState
+                { model
+                    | players = String.split "," playersList
+                }
+            , Cmd.none
+            )
+
+        SetSecuritiesListMsg securitiesList ->
+            ( CreateAppState
+                { model
+                    | securities = String.split "," securitiesList
+                }
+            , Cmd.none
+            )
+
+
 updatePlay : PlayMsgType -> GameName -> PlayPageModel -> ( PlayPageModel, Cmd Msg )
 updatePlay msg gameName model =
     case msg of
@@ -595,16 +646,16 @@ update msg model =
             )
 
         -- TODO: do we even need this? There's no functionality attached; we're really just appeasing the type gods.
-        ( LoadAppState, LoadMsg ) ->
+        ( LoadAppState _, LoadMsg ) ->
             ( model, Cmd.none )
 
         ( CreateAppState createModel, CreateMsg createMsg ) ->
             let
-                ( newModel, cmd ) =
+                ( newAppState, cmd ) =
                     updateCreate createMsg createModel
             in
             ( { model
-                | appState = CreateAppState newModel
+                | appState = newAppState
               }
             , cmd
             )
@@ -632,25 +683,28 @@ update msg model =
             in
             ( model, pollGameState model.gameName (Just playModel.gameState) )
 
-        ( LoadAppState, GotUpdate (Err error) ) ->
+        ( LoadAppState gameName, GotUpdate (Err error) ) ->
             let
-                mdl =
+                _ =
                     Debug.log ("failed to load, trying to create: " ++ Debug.toString error) model
+
+                ( newAppState, cmd ) =
+                    initCreateAppState gameName
             in
             ( { model
-                | appState =
-                    CreateAppState {}
+                | appState = newAppState
               }
-            , Cmd.none
+            , cmd
             )
 
-        ( LoadAppState, GotUpdate (Ok newGameState) ) ->
+        ( LoadAppState gameName, GotUpdate (Ok newGameState) ) ->
             let
                 mdl =
                     Debug.log ("got update: " ++ Debug.toString s)
             in
             ( { model
                 | appState =
+                    -- TODO: cram game name into PlayAppState
                     PlayAppState
                         { gameState = newGameState
                         , selected = must (List.head (Dict.keys newGameState.players))
@@ -763,9 +817,9 @@ viewGameState gameState selectedPlayer =
         ]
 
 
-viewLoad : Html Msg
-viewLoad =
-    h1 [] [ text "LOADING" ]
+viewLoad : String -> Html Msg
+viewLoad gameName =
+    h1 [] [ text ("LOADING" ++ gameName) ]
 
 
 viewPlay : PlayPageModel -> Html PlayMsgType
@@ -796,8 +850,8 @@ view model =
     let
         html =
             case model.appState of
-                LoadAppState ->
-                    viewLoad
+                LoadAppState gameName ->
+                    viewLoad gameName
 
                 CreateAppState createModel ->
                     viewCreate createModel
