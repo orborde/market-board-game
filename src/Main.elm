@@ -13,7 +13,8 @@ import List
 import Maybe exposing (withDefault)
 import Url
 import Url.Builder
-import Url.Parser as UP
+import Url.Parser as UP exposing ((<?>))
+import Url.Parser.Query as UPQ
 
 
 main =
@@ -344,12 +345,14 @@ type alias Model =
 init : () -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init _ url _ =
     let
-        routeWeAreAt =
-            Maybe.withDefault UnknownRoute (UP.parse route url)
+        pathlessUrl = {url|path=""}
+        routeWeAreAt = case UP.parse route pathlessUrl of
+            Nothing -> UnknownRoute
+            Just r -> r
     in
     case routeWeAreAt of
         UnknownRoute ->
-            Debug.todo "rekt"
+            Debug.todo <| "Unknown route: " ++ Debug.toString pathlessUrl
 
         GameRoute gameName ->
             ( { appState = LoadAppState gameName
@@ -529,13 +532,14 @@ type alias GamePart =
 
 gamePartUrl : GameName -> List GamePart -> String
 gamePartUrl name path =
-    Url.Builder.relative (List.concat [ [ name ], path ]) []
+    -- TODO: have a way for the stateserver URL to be injected via flags
+    Url.Builder.absolute (List.concat [ [ "states", name ], path ]) []
 
 
 getGameState : GameName -> Cmd Msg
 getGameState gameName =
     Http.get
-        { url = gamePartUrl gameName [ "state" ]
+        { url = gamePartUrl gameName []
         , expect = expectGameState
         }
 
@@ -575,7 +579,7 @@ postGameState gameName old new =
                     JE.null
     in
     Http.post
-        { url = gamePartUrl gameName [ "state" ]
+        { url = gamePartUrl gameName []
         , expect = Http.expectWhatever FinishedSend
         , body =
             Http.jsonBody
@@ -950,10 +954,12 @@ type Route
 
 route : UP.Parser (Route -> a) a
 route =
-    UP.oneOf
-        [ UP.map UnknownRoute UP.top
-        , UP.map GameRoute UP.string
-        ]
+    let
+        f : Maybe String -> Route
+        f maybeGameName = case maybeGameName of
+            Nothing -> UnknownRoute
+            Just gameName -> GameRoute gameName
+    in UP.map f (UP.top <?> UPQ.string "game")
 
 
 view : Model -> Browser.Document Msg
