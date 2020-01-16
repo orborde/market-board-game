@@ -2,7 +2,6 @@ module Main exposing (main)
 
 import Browser
 import Browser.Navigation as Nav
-import Cons
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (..)
@@ -42,16 +41,6 @@ type alias SecurityType =
 
 type alias SecurityAmount =
     Int
-
-
-allPlayers : Cons.Cons PlayerName
-allPlayers =
-    Cons.appendList (Cons.singleton "Speez") [ "Yam" ]
-
-
-securities : Cons.Cons SecurityType
-securities =
-    Cons.appendList (Cons.singleton "AMZN") [ "GOOG", "F" ]
 
 
 type alias Assets =
@@ -117,14 +106,14 @@ bookPrice =
     100
 
 
-assetsBuyBook : Assets -> Maybe Assets
-assetsBuyBook assets =
+assetsBuyBook : Assets -> List SecurityType -> Maybe Assets
+assetsBuyBook assets securities =
     if assets.monies >= bookPrice then
         Just
             { assets
                 | monies = assets.monies - bookPrice
                 , securities =
-                    Cons.foldl
+                    List.foldl
                         (\security newSecurities ->
                             Dict.update security (Maybe.withDefault 0 >> (+) 1 >> Just) newSecurities
                         )
@@ -136,18 +125,18 @@ assetsBuyBook assets =
         Nothing
 
 
-assetsSellBook : Assets -> Maybe Assets
-assetsSellBook assets =
+assetsSellBook : Assets -> List SecurityType -> Maybe Assets
+assetsSellBook assets securities =
     let
         hasEveryAsset =
-            Cons.all (\security -> assetsGetSecurity assets security > 0) securities
+            List.all (\security -> assetsGetSecurity assets security > 0) securities
     in
     if hasEveryAsset then
         Just
             { assets
                 | monies = assets.monies + bookPrice
                 , securities =
-                    Cons.foldl
+                    List.foldl
                         (\security newSecurities ->
                             Dict.insert security (assetsGetSecurity assets security - 1) newSecurities
                         )
@@ -167,9 +156,9 @@ type alias GameState =
     }
 
 
-initGameState =
-    { players = Dict.fromList <| Cons.toList <| Cons.map (\player -> ( player, { monies = 1000, securities = Dict.empty } )) allPlayers
-    , markets = Dict.fromList <| Cons.toList <| Cons.map (\security -> ( security, defaultMarket )) securities
+initGameState players securities =
+    { players = Dict.fromList <| List.map (\player -> ( player, { monies = 1000, securities = Dict.empty } )) players
+    , markets = Dict.fromList <| List.map (\security -> ( security, defaultMarket )) securities
     , bankMonies = 0
     , clock = 0
     }
@@ -474,7 +463,7 @@ updateGameStateInternal gameState selectedPlayer msg =
                         gameState
 
         BuyBook ->
-            case assetsBuyBook selectedPlayerAssets of
+            case assetsBuyBook selectedPlayerAssets (Dict.keys gameState.markets) of
                 Nothing ->
                     Debug.log "can't buy book" gameState
 
@@ -485,7 +474,7 @@ updateGameStateInternal gameState selectedPlayer msg =
                     }
 
         SellBook ->
-            case assetsSellBook selectedPlayerAssets of
+            case assetsSellBook selectedPlayerAssets (Dict.keys gameState.markets) of
                 Nothing ->
                     Debug.log "can't sell book" gameState
 
@@ -594,7 +583,7 @@ updateCreate msg model =
             in
             ( newAppState
             , Cmd.batch
-                [ postGameState model.gameName Nothing initGameState
+                [ postGameState model.gameName Nothing (initGameState model.players model.securities)
                 , pollCmd
                 ]
             )
@@ -802,7 +791,7 @@ viewGameState gameState selectedPlayer =
             must (Dict.get selectedPlayer gameState.players)
     in
     div []
-        [ p [] <| Cons.toList <| Cons.map (\player -> button [ onClick (SwitchTo player) ] [ text player ]) allPlayers
+        [ p [] <| List.map (\player -> button [ onClick (SwitchTo player) ] [ text player ]) (Dict.keys gameState.players)
         , p [] [ text (selectedPlayer ++ " / Turn: " ++ String.fromInt gameState.clock) ]
         , p []
             [ text
