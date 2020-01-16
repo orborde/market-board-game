@@ -209,7 +209,8 @@ encodeGameState state =
 
 
 type alias PlayPageModel =
-    { selected : PlayerName
+    { gameName : GameName
+    , selected : PlayerName
     , gameState : GameState
     }
 
@@ -309,7 +310,6 @@ type AppState
 
 type alias Model =
     { appState : AppState
-    , gameName : GameName
     }
 
 
@@ -338,7 +338,6 @@ init _ url _ =
 
         GameRoute gameName ->
             ( { appState = LoadAppState gameName
-              , gameName = gameName
               }
             , getGameState gameName
             )
@@ -605,8 +604,8 @@ updateCreate msg model =
             )
 
 
-updatePlay : PlayMsgType -> GameName -> PlayPageModel -> ( PlayPageModel, Cmd Msg )
-updatePlay msg gameName model =
+updatePlay : PlayMsgType -> PlayPageModel -> ( PlayPageModel, Cmd Msg )
+updatePlay msg model =
     case msg of
         OrderMsg gsMsg ->
             let
@@ -616,7 +615,7 @@ updatePlay msg gameName model =
             ( { model
                 | gameState = newGameState
               }
-            , postGameState gameName (Just model.gameState) newGameState
+            , postGameState model.gameName (Just model.gameState) newGameState
             )
 
         SwitchTo player ->
@@ -635,7 +634,7 @@ update msg model =
         ( PlayAppState playModel, PlayMsg playMsg ) ->
             let
                 ( newModel, cmd ) =
-                    updatePlay playMsg model.gameName playModel
+                    updatePlay playMsg playModel
             in
             ( { model
                 | appState = PlayAppState newModel
@@ -671,7 +670,7 @@ update msg model =
                             | gameState = newGameState
                         }
               }
-            , pollGameState model.gameName (Just newGameState)
+            , pollGameState playModel.gameName (Just newGameState)
             )
 
         ( PlayAppState playModel, GotUpdate (Err error) ) ->
@@ -679,7 +678,7 @@ update msg model =
                 _ =
                     Debug.log ("failed to poll. I hope your phone has lots of battery! : " ++ Debug.toString error) playModel
             in
-            ( model, pollGameState model.gameName (Just playModel.gameState) )
+            ( model, pollGameState playModel.gameName (Just playModel.gameState) )
 
         ( LoadAppState gameName, GotUpdate (Err error) ) ->
             let
@@ -702,13 +701,13 @@ update msg model =
             in
             ( { model
                 | appState =
-                    -- TODO: cram game name into PlayAppState
                     PlayAppState
-                        { gameState = newGameState
+                        { gameName = gameName
+                        , gameState = newGameState
                         , selected = must (List.head (Dict.keys newGameState.players))
                         }
               }
-            , pollGameState model.gameName (Just newGameState)
+            , pollGameState gameName (Just newGameState)
             )
 
         ( _, FinishedSend (Ok _) ) ->
@@ -903,6 +902,6 @@ view model =
                 PlayAppState playModel ->
                     Html.map PlayMsg (viewPlay playModel)
     in
-    { title = "Market Game " ++ model.gameName
+    { title = "Market Game"
     , body = [ html ]
     }
