@@ -170,12 +170,12 @@ initGameState players securities =
 
 gameStateHasBidDutchBook : GameState -> Bool
 gameStateHasBidDutchBook gameState =
-    List.sum (List.map (highestBid >> Maybe.withDefault 0) (Dict.values gameState.markets)) > 100
+    List.sum (List.map (highestBid >> Maybe.withDefault 0) (Dict.values gameState.markets)) > bookPrice
 
 
 gameStateHasAskDutchBook : GameState -> Bool
 gameStateHasAskDutchBook gameState =
-    List.sum (List.map (lowestAsk >> Maybe.withDefault 100) (Dict.values gameState.markets)) < 100
+    List.sum (List.map (lowestAsk >> Maybe.withDefault bookPrice) (Dict.values gameState.markets)) < bookPrice
 
 
 gameStateBankStealsArbitrage : GameState -> GameState
@@ -827,7 +827,7 @@ viewMarket security market assets =
         (List.concat
             [ [ text <| security ++ " " ++ String.fromInt (assetsGetSecurity assets security)
               , br [] []
-              , text <| "(-> " ++ String.fromInt (assets.monies + (assetsGetSecurity assets security * 100)) ++ ")"
+              , text <| "(-> " ++ String.fromInt (assets.monies + (assetsGetSecurity assets security * bookPrice)) ++ ")"
               ]
             , List.map (\bid -> td [ width cellWidth ] [ text (String.fromInt bid) ]) (List.reverse (List.drop 1 market.openBids))
             , case List.head market.openBids of
