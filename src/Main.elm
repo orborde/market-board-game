@@ -836,17 +836,19 @@ viewMarket : SecurityType -> Market -> Assets -> Html PlayMsgType
 viewMarket security market assets =
     tr []
         (List.concat
-            [ [ text <| security ++ " " ++ String.fromInt (assetsGetSecurity assets security)
-              , br [] []
-              , text <| "(-> " ++ String.fromInt (assets.monies + (assetsGetSecurity assets security * bookPrice)) ++ ")"
+            [ [ td [ style "border-bottom" "1px solid black", style "border-right" "1px solid black" ]
+                    [ text <| security ++ " " ++ String.fromInt (assetsGetSecurity assets security)
+                    , br [] []
+                    , text <| "(-> " ++ String.fromInt (assets.monies + (assetsGetSecurity assets security * bookPrice)) ++ ")"
+                    ]
               ]
-            , List.map (\bid -> td [ width cellWidth ] [ text (String.fromInt bid) ]) (List.reverse (List.drop 1 market.openBids))
+            , List.map (\bid -> td [ style "border-bottom" "1px solid black", width cellWidth ] [ text (String.fromInt bid) ]) (List.reverse (List.drop 1 market.openBids))
             , case List.head market.openBids of
                 Nothing ->
                     []
 
                 Just topBid ->
-                    [ td [ width cellWidth ]
+                    [ td [ style "border-bottom" "1px solid black", width cellWidth ]
                         [ table [ style "border" "1px solid black" ]
                             [ tr []
                                 [ td [ width halfCellWidth ] [ text "x" ]
@@ -860,7 +862,7 @@ viewMarket security market assets =
                     []
 
                 Just bottomAsk ->
-                    [ td [ width cellWidth ]
+                    [ td [ style "border-bottom" "1px solid black", width cellWidth ]
                         [ table [ style "border" "1px solid black" ]
                             [ tr []
                                 [ td [ width halfCellWidth ] [ button [ onClick <| GameStateUpdateMsg (Buy security), disabled (not (canBuy assets security market)) ] [ text ("BUY " ++ String.fromInt bottomAsk) ] ]
@@ -870,7 +872,7 @@ viewMarket security market assets =
                         ]
                     ]
             , []
-            , List.map (\ask -> td [ width cellWidth ] [ text (String.fromInt ask) ]) (List.drop 1 market.openAsks)
+            , List.map (\ask -> td [ style "border-bottom" "1px solid black", width cellWidth ] [ text (String.fromInt ask) ]) (List.drop 1 market.openAsks)
             ]
         )
 
