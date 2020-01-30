@@ -825,7 +825,10 @@ viewMarket : SecurityType -> Market -> Assets -> Html PlayMsgType
 viewMarket security market assets =
     tr []
         (List.concat
-            [ [ text <| security ++ " " ++ String.fromInt (assetsGetSecurity assets security) ]
+            [ [ text <| security ++ " " ++ String.fromInt (assetsGetSecurity assets security)
+              , br [] []
+              , text <| "(-> " ++ String.fromInt (assets.monies + (assetsGetSecurity assets security * 100)) ++ ")"
+              ]
             , List.map (\bid -> td [ width cellWidth ] [ text (String.fromInt bid) ]) (List.reverse (List.drop 1 market.openBids))
             , case List.head market.openBids of
                 Nothing ->
