@@ -13,8 +13,7 @@ import List
 import Maybe exposing (withDefault)
 import Url
 import Url.Builder
-import Url.Parser as UP exposing ((<?>))
-import Url.Parser.Query as UPQ
+import Url.Parser as UP
 
 
 main =
@@ -345,14 +344,12 @@ type alias Model =
 init : () -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init _ url _ =
     let
-        pathlessUrl = {url|path=""}
-        routeWeAreAt = case UP.parse route pathlessUrl of
-            Nothing -> UnknownRoute
-            Just r -> r
+        routeWeAreAt =
+            Maybe.withDefault UnknownRoute (UP.parse route url)
     in
     case routeWeAreAt of
         UnknownRoute ->
-            Debug.todo <| "Unknown route: " ++ Debug.toString pathlessUrl
+            Debug.todo "rekt"
 
         GameRoute gameName ->
             ( { appState = LoadAppState gameName
@@ -532,14 +529,13 @@ type alias GamePart =
 
 gamePartUrl : GameName -> List GamePart -> String
 gamePartUrl name path =
-    -- TODO: have a way for the stateserver URL to be injected via flags
-    Url.Builder.absolute (List.concat [ [ "states", name ], path ]) []
+    Url.Builder.relative (List.concat [ [ name ], path ]) []
 
 
 getGameState : GameName -> Cmd Msg
 getGameState gameName =
     Http.get
-        { url = gamePartUrl gameName []
+        { url = gamePartUrl gameName [ "state" ]
         , expect = expectGameState
         }
 
@@ -579,7 +575,7 @@ postGameState gameName old new =
                     JE.null
     in
     Http.post
-        { url = gamePartUrl gameName []
+        { url = gamePartUrl gameName [ "state" ]
         , expect = Http.expectWhatever FinishedSend
         , body =
             Http.jsonBody
@@ -954,12 +950,10 @@ type Route
 
 route : UP.Parser (Route -> a) a
 route =
-    let
-        f : Maybe String -> Route
-        f maybeGameName = case maybeGameName of
-            Nothing -> UnknownRoute
-            Just gameName -> GameRoute gameName
-    in UP.map f (UP.top <?> UPQ.string "game")
+    UP.oneOf
+        [ UP.map UnknownRoute UP.top
+        , UP.map GameRoute UP.string
+        ]
 
 
 view : Model -> Browser.Document Msg
