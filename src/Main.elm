@@ -153,15 +153,19 @@ type alias GameState =
     , markets : Dict.Dict SecurityType Market
     , bankMonies : Int
     , clock : Int
+    , destroyArbitrage : Bool
     }
 
 
+initGameState : List PlayerName -> List SecurityType -> GameState
 initGameState players securities =
-    { players = Dict.fromList <| List.map (\player -> ( player, { monies = 1000, securities = Dict.empty } )) players
-    , markets = Dict.fromList <| List.map (\security -> ( security, defaultMarket )) securities
-    , bankMonies = 0
-    , clock = 0
-    }
+    gameStateBankStealsArbitrage
+        { players = Dict.fromList <| List.map (\player -> ( player, { monies = 1000, securities = Dict.empty } )) players
+        , markets = Dict.fromList <| List.map (\security -> ( security, defaultMarket )) securities
+        , bankMonies = 0
+        , clock = 0
+        , destroyArbitrage = True
+        }
 
 
 gameStateHasBidDutchBook : GameState -> Bool
@@ -217,13 +221,18 @@ clockField =
     "clock"
 
 
+destroyArbitrageField =
+    "destroyArbitrage"
+
+
 decodeGameState : JD.Decoder GameState
 decodeGameState =
-    JD.map4 GameState
+    JD.map5 GameState
         (JD.field playersField decodePlayersDict)
         (JD.field marketsField decodeMarketsDict)
         (JD.field bankMoniesField JD.int)
         (JD.field clockField JD.int)
+        (JD.field destroyArbitrageField JD.bool)
 
 
 encodeGameState : GameState -> JE.Value
@@ -233,6 +242,7 @@ encodeGameState state =
         , ( marketsField, JE.dict (\k -> k) encodeMarket state.markets )
         , ( bankMoniesField, JE.int state.bankMonies )
         , ( clockField, JE.int state.clock )
+        , ( destroyArbitrageField, JE.bool state.destroyArbitrage )
         ]
 
 
@@ -385,6 +395,7 @@ type GameStateMsg
     | Sell SecurityType
     | BuyBook
     | SellBook
+    | ToggleDestroyArbitrage
 
 
 type CreateMsgType
@@ -394,8 +405,7 @@ type CreateMsgType
 
 
 type PlayMsgType
-    = OrderMsg GameStateMsg
-    | DestroyArbitrage
+    = GameStateUpdateMsg GameStateMsg
     | SwitchTo PlayerName
 
 
@@ -499,12 +509,26 @@ updateGameStateInternal gameState selectedPlayer msg =
                         , bankMonies = gameState.bankMonies - bookPrice
                     }
 
+        ToggleDestroyArbitrage ->
+            { gameState
+                | destroyArbitrage = not gameState.destroyArbitrage
+            }
+
+
+maybeDestroyArbitrage : GameState -> GameState
+maybeDestroyArbitrage gameState =
+    if gameState.destroyArbitrage then
+        gameStateBankStealsArbitrage gameState
+
+    else
+        gameState
+
 
 updateGameState : GameState -> PlayerName -> GameStateMsg -> GameState
 updateGameState gameState selected msg =
     let
         newState =
-            updateGameStateInternal gameState selected msg
+            updateGameStateInternal gameState selected msg |> maybeDestroyArbitrage
     in
     { newState
         | clock = newState.clock + 1
@@ -623,21 +647,10 @@ updateCreate msg model =
 updatePlay : PlayMsgType -> PlayPageModel -> ( PlayPageModel, Cmd Msg )
 updatePlay msg model =
     case msg of
-        OrderMsg gsMsg ->
+        GameStateUpdateMsg gsMsg ->
             let
                 newGameState =
                     updateGameState model.gameState model.selected gsMsg
-            in
-            ( { model
-                | gameState = newGameState
-              }
-            , postGameState model.gameName (Just model.gameState) newGameState
-            )
-
-        DestroyArbitrage ->
-            let
-                newGameState =
-                    gameStateBankStealsArbitrage model.gameState
             in
             ( { model
                 | gameState = newGameState
@@ -823,7 +836,7 @@ viewMarket security market assets =
                         [ table [ style "border" "1px solid black" ]
                             [ tr []
                                 [ td [ width halfCellWidth ] [ text "x" ]
-                                , td [ width halfCellWidth ] [ button [ onClick <| OrderMsg (Sell security), disabled (not (canSell assets security market)) ] [ text ("SELL " ++ String.fromInt topBid) ] ]
+                                , td [ width halfCellWidth ] [ button [ onClick <| GameStateUpdateMsg (Sell security), disabled (not (canSell assets security market)) ] [ text ("SELL " ++ String.fromInt topBid) ] ]
                                 ]
                             ]
                         ]
@@ -836,7 +849,7 @@ viewMarket security market assets =
                     [ td [ width cellWidth ]
                         [ table [ style "border" "1px solid black" ]
                             [ tr []
-                                [ td [ width halfCellWidth ] [ button [ onClick <| OrderMsg (Buy security), disabled (not (canBuy assets security market)) ] [ text ("BUY " ++ String.fromInt bottomAsk) ] ]
+                                [ td [ width halfCellWidth ] [ button [ onClick <| GameStateUpdateMsg (Buy security), disabled (not (canBuy assets security market)) ] [ text ("BUY " ++ String.fromInt bottomAsk) ] ]
                                 , td [ width halfCellWidth ] [ text "x" ]
                                 ]
                             ]
@@ -871,13 +884,21 @@ viewGameState gameState selectedPlayer =
                 )
             ]
         , p []
-            [ button [ onClick <| OrderMsg BuyBook ] [ text "BUY BOOK" ]
-            , button [ onClick <| OrderMsg SellBook ] [ text "SELL BOOK" ]
+            [ button [ onClick <| GameStateUpdateMsg BuyBook ] [ text "BUY BOOK" ]
+            , button [ onClick <| GameStateUpdateMsg SellBook ] [ text "SELL BOOK" ]
             ]
         , table [ style "border" "1px solid black" ]
             (List.map (\( security, market ) -> viewMarket security market selectedPlayerAssets) (Dict.toList gameState.markets))
         , p []
-            [ button [ onClick DestroyArbitrage ] [ text "Destroy arbitrage" ]
+            [ label []
+                [ input
+                    [ type_ "checkbox"
+                    , onClick (GameStateUpdateMsg ToggleDestroyArbitrage)
+                    , checked gameState.destroyArbitrage
+                    ]
+                    []
+                , text "Destroy arbitrage"
+                ]
             ]
         ]
 
