@@ -164,7 +164,7 @@ initGameState players securities =
         , markets = Dict.fromList <| List.map (\security -> ( security, defaultMarket )) securities
         , bankMonies = 0
         , clock = 0
-        , destroyArbitrage = True
+        , destroyArbitrage = False
         }
 
 
