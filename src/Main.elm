@@ -106,9 +106,14 @@ bookPrice =
     100
 
 
+assetsCanBuyBook : Assets -> Bool
+assetsCanBuyBook assets =
+    assets.monies >= bookPrice
+
+
 assetsBuyBook : Assets -> List SecurityType -> Maybe Assets
 assetsBuyBook assets securities =
-    if assets.monies >= bookPrice then
+    if assetsCanBuyBook assets then
         Just
             { assets
                 | monies = assets.monies - bookPrice
@@ -125,13 +130,19 @@ assetsBuyBook assets securities =
         Nothing
 
 
+hasEveryAsset : Assets -> List SecurityType -> Bool
+hasEveryAsset assets securities =
+    List.all (\security -> assetsGetSecurity assets security > 0) securities
+
+
+assetsCanSellBook : Assets -> List SecurityType -> Bool
+assetsCanSellBook assets securities =
+    hasEveryAsset assets securities
+
+
 assetsSellBook : Assets -> List SecurityType -> Maybe Assets
 assetsSellBook assets securities =
-    let
-        hasEveryAsset =
-            List.all (\security -> assetsGetSecurity assets security > 0) securities
-    in
-    if hasEveryAsset then
+    if assetsCanSellBook assets securities then
         Just
             { assets
                 | monies = assets.monies + bookPrice
@@ -887,8 +898,16 @@ viewGameState gameState selectedPlayer =
                 )
             ]
         , p []
-            [ button [ onClick <| GameStateUpdateMsg BuyBook ] [ text "BUY BOOK" ]
-            , button [ onClick <| GameStateUpdateMsg SellBook ] [ text "SELL BOOK" ]
+            [ button
+                [ onClick <| GameStateUpdateMsg BuyBook
+                , disabled <| not <| assetsCanBuyBook selectedPlayerAssets
+                ]
+                [ text "BUY BOOK" ]
+            , button
+                [ onClick <| GameStateUpdateMsg SellBook
+                , disabled <| not <| assetsCanSellBook selectedPlayerAssets <| Dict.keys gameState.markets
+                ]
+                [ text "SELL BOOK" ]
             ]
         , table [ style "border" "1px solid black" ]
             (List.map (\( security, market ) -> viewMarket security market selectedPlayerAssets) (Dict.toList gameState.markets))
